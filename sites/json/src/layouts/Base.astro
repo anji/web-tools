@@ -1,0 +1,123 @@
+---
+import { registry } from '../registry';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  /** Extra JSON-LD blocks, already stringified. */
+  schemas?: string[];
+}
+
+const { title, description, path, schemas = [] } = Astro.props;
+const { brand } = registry;
+const canonical = `${brand.origin}${path}`;
+const categories = registry.categories();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={brand.name} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- No analytics, no fonts, no third-party anything. The privacy claim on
+         every page has to be true of the page itself, not just the tools. -->
+    {schemas.map((schema) => <script type="application/ld+json" set:html={schema} />)}
+  </head>
+
+  <body class="flex min-h-screen flex-col">
+    <header class="border-b border-slate-800/80">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-4">
+        <a href="/" class="text-lg font-bold tracking-tight text-slate-50">
+          {brand.name}
+        </a>
+        <nav class="hidden items-center gap-6 text-sm md:flex">
+          {categories.map((category) => (
+            <div class="group relative">
+              <button class="text-slate-400 transition hover:text-slate-100">{category.name}</button>
+              <div class="invisible absolute left-1/2 z-20 w-64 -translate-x-1/2 pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100">
+                <div class="rounded-lg border border-slate-800 bg-slate-900 p-2 shadow-xl">
+                  {category.tools.map((tool) => (
+                    <a
+                      href={`/${tool.slug}/`}
+                      class="block rounded px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-slate-50"
+                    >
+                      {tool.label}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </nav>
+        {brand.repo && (
+          <a
+            href={brand.repo}
+            class="text-sm text-slate-400 transition hover:text-slate-100"
+            rel="noopener"
+          >
+            Source
+          </a>
+        )}
+      </div>
+    </header>
+
+    <main class="flex-1"><slot /></main>
+
+    <footer class="border-t border-slate-800/80 bg-slate-900/30">
+      <div class="mx-auto max-w-6xl px-4 py-10">
+        <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          {categories.map((category) => (
+            <div>
+              <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                {category.name}
+              </h2>
+              <ul class="space-y-2">
+                {category.tools.map((tool) => (
+                  <li>
+                    <a href={`/${tool.slug}/`} class="text-sm text-slate-400 transition hover:text-sky-400">
+                      {tool.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {brand.siblings.length > 0 && (
+          <div class="mt-10 border-t border-slate-800 pt-6">
+            <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              More tools
+            </h2>
+            <div class="flex flex-wrap gap-4">
+              {brand.siblings.map((sibling) => (
+                <a href={sibling.href} class="text-sm text-slate-400 transition hover:text-sky-400">
+                  {sibling.name}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <p class="mt-10 text-xs leading-relaxed text-slate-600">
+          Every tool on {brand.name} runs in your browser. Nothing you paste or drop is uploaded,
+          stored, or logged — disconnect from the internet and the tools keep working.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

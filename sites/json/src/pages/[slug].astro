@@ -1,0 +1,111 @@
+---
+import Base from '../layouts/Base.astro';
+import JsonTool from '../components/JsonTool';
+import { registry } from '../registry';
+
+export function getStaticPaths() {
+  return registry.tools.map((tool) => ({ params: { slug: tool.slug }, props: { toolId: tool.id } }));
+}
+
+const { toolId } = Astro.props;
+const tool = registry.tools.find((t) => t.id === toolId)!;
+const { brand } = registry;
+const related = registry.tools.filter((t) => t.id !== tool.id && t.category === tool.category);
+
+const appSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: `${tool.seo.heading} — ${brand.name}`,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Any (web browser)',
+  description: tool.seo.description,
+  url: `${brand.origin}/${tool.slug}/`,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+});
+
+// FAQPage markup is what actually earns the extra SERP real estate, so every
+// tool definition carries real questions rather than filler.
+const faqSchema = tool.seo.faq?.length
+  ? JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: tool.seo.faq.map((entry) => ({
+        '@type': 'Question',
+        name: entry.question,
+        acceptedAnswer: { '@type': 'Answer', text: entry.answer },
+      })),
+    })
+  : undefined;
+
+const breadcrumbSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: brand.name, item: `${brand.origin}/` },
+    { '@type': 'ListItem', position: 2, name: tool.label, item: `${brand.origin}/${tool.slug}/` },
+  ],
+});
+
+const schemas = [appSchema, breadcrumbSchema, ...(faqSchema ? [faqSchema] : [])];
+---
+
+<Base
+  title={tool.seo.title}
+  description={tool.seo.description}
+  path={`/${tool.slug}/`}
+  schemas={schemas}
+>
+  <div class="mx-auto max-w-6xl px-4 py-10">
+    <nav class="mb-6 text-sm text-slate-500">
+      <a href="/" class="transition hover:text-slate-300">{brand.name}</a>
+      <span class="mx-2">/</span>
+      <span class="text-slate-400">{tool.label}</span>
+    </nav>
+
+    <h1 class="text-3xl font-bold tracking-tight text-slate-50 sm:text-4xl">{tool.seo.heading}</h1>
+    <p class="mt-4 max-w-3xl text-base leading-relaxed text-slate-400">{tool.seo.intro}</p>
+
+    <div class="mt-8">
+      <JsonTool client:load toolId={tool.id} />
+    </div>
+
+    <p class="mt-4 text-xs text-slate-600">
+      Runs entirely in your browser. Nothing you paste here is uploaded or stored.
+    </p>
+
+    {tool.seo.faq && tool.seo.faq.length > 0 && (
+      <section class="mt-16 max-w-3xl">
+        <h2 class="text-xl font-bold text-slate-100">Questions</h2>
+        <div class="mt-6 space-y-6">
+          {tool.seo.faq.map((entry) => (
+            <div>
+              <h3 class="font-semibold text-slate-200">{entry.question}</h3>
+              <p class="mt-2 text-sm leading-relaxed text-slate-400">{entry.answer}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    )}
+
+    {related.length > 0 && (
+      <section class="mt-16">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">
+          More {tool.category.toLowerCase()} tools
+        </h2>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {related.map((other) => (
+            <a
+              href={`/${other.slug}/`}
+              class="group rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-sky-800"
+            >
+              <h3 class="text-sm font-semibold text-slate-200 transition group-hover:text-sky-400">
+                {other.label}
+              </h3>
+              <p class="mt-1.5 text-xs leading-relaxed text-slate-500">{other.blurb}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
+</Base>

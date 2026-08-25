@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+/* The shared UI package ships source, not compiled CSS, so Tailwind has to scan it. */
+@source '../../../../packages/ui/src';
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-950 text-slate-200 antialiased;
+}

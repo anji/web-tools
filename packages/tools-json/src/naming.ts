@@ -114,19 +114,30 @@ export function collectNamedTypes(root: Schema, rootName: string): NamingResult 
     }
   };
 
-  visit(root, rootName, '');
-
   const { schema: bareRoot } = splitNullable(root);
-  const rootObject =
-    bareRoot.kind === 'object'
-      ? bareRoot
-      : bareRoot.kind === 'array' && splitNullable(bareRoot.items).schema.kind === 'object'
-        ? (splitNullable(bareRoot.items).schema as Extract<Schema, { kind: 'object' }>)
-        : undefined;
+  const rootAlias = pascalCase(rootName) || 'Root';
+
+  if (bareRoot.kind === 'array') {
+    // A root array needs two names: the alias for the array itself, and one for
+    // its element type. Letting both default to the root name emits
+    // `type Root = Root[]`, which does not compile -- so the alias claims the
+    // root name first and the element takes the singular (or `<Root>Item` when
+    // singularising changes nothing).
+    used.add(rootAlias);
+    const singular = pascalCase(singularize(rootName));
+    const elementName = singular && singular !== rootAlias ? singular : `${rootAlias}Item`;
+    visit(bareRoot.items, elementName, '');
+    return { types, names, rootName: rootAlias };
+  }
+
+  visit(root, rootName, '');
 
   return {
     types,
     names,
-    rootName: rootObject ? (names.get(schemaKey(rootObject)) ?? rootName) : pascalCase(rootName),
+    rootName:
+      bareRoot.kind === 'object'
+        ? (names.get(schemaKey(bareRoot)) ?? rootAlias)
+        : rootAlias,
   };
 }

@@ -134,8 +134,10 @@ describe('json schema emitter', () => {
     JSON.parse(emitJsonSchema(inferSchema(value), { ...defaultJsonSchemaOptions, ...over }).code);
 
   it('lists only non-optional keys as required', () => {
+    // A root array names its element type RootItem; Root is the array alias.
     const doc = schema([{ a: 1, b: 2 }, { a: 3 }]);
-    expect(doc.$defs.Root.required).toEqual(['a']);
+    expect(doc.$defs.RootItem.required).toEqual(['a']);
+    expect(doc.items.$ref).toBe('#/$defs/RootItem');
   });
 
   it('hoists nested shapes into $defs and references them', () => {
@@ -147,12 +149,12 @@ describe('json schema emitter', () => {
   it('uses definitions and anyOf for nullable refs under draft-07', () => {
     const doc = schema([{ team: { name: 'Core' } }, { team: null }], { draft: 'draft-07' });
     expect(doc.definitions).toBeDefined();
-    expect(doc.definitions.Root.properties.team.anyOf).toBeDefined();
+    expect(doc.definitions.RootItem.properties.team.anyOf).toBeDefined();
   });
 
   it('expresses a nullable primitive as a type array', () => {
     const doc = schema([{ bio: 'x' }, { bio: null }]);
-    expect(doc.$defs.Root.properties.bio.type).toEqual(['string', 'null']);
+    expect(doc.$defs.RootItem.properties.bio.type).toEqual(['string', 'null']);
   });
 
   it('carries detected string formats through', () => {
