@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.output/
+.vercel/
+.netlify/
+*.tsbuildinfo
+.DS_Store
+.env
+.env.local
+coverage/
