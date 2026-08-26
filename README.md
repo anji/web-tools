@@ -92,6 +92,50 @@ pnpm --filter @tools/site-json build     # static output in sites/json/dist
 The build is fully static: 12 pre-rendered tool pages, a homepage, a 404, a
 sitemap and a robots.txt. It deploys to any static host.
 
+## Deploying
+
+Deploys go to **Cloudflare Workers static assets**, driven by GitHub Actions —
+not the Cloudflare Pages git integration. Two reasons, both structural:
+
+- Pages caps you at **5 projects per repository**, and this repo is designed to
+  hold considerably more than five sites.
+- Pages is in maintenance mode; Cloudflare points new projects at Workers,
+  which serves static assets natively and bills them at zero.
+
+Pushing deploys from CI rather than letting a git integration pull sidesteps the
+per-repo project limit entirely, and lets one workflow fan out across every site.
+
+`.github/workflows/deploy.yml` does:
+
+1. **test** — typecheck and unit tests across the workspace.
+2. **changed** — works out which sites need rebuilding. A change under
+   `packages/` is shared and rebuilds everything; a change under `sites/<name>/`
+   rebuilds only that site. A push touching neither deploys nothing.
+3. **deploy** — a matrix over the changed sites. Each builds, verifies, and
+   `wrangler deploy`s independently, with `fail-fast: false` so one bad site
+   cannot block the others.
+
+Two repository secrets are required: `CLOUDFLARE_API_TOKEN` (Workers Scripts:
+Edit) and `CLOUDFLARE_ACCOUNT_ID`.
+
+Each site owns a `wrangler.jsonc` whose only meaningful field is the Worker
+name, and a `public/_headers` that Astro copies into `dist/`.
+
+### The CSP is a feature, not boilerplate
+
+`public/_headers` sets `connect-src 'none'`. The page is then *structurally*
+unable to open a fetch, an XHR, a WebSocket, a beacon or a remote module — the
+browser refuses. The privacy promise stops depending on us not adding an
+analytics snippet later, and starts being enforced by the user's own browser.
+
+`scripts/verify-egress.mjs` proves it on every deploy: it loads a real page
+under the real headers, confirms the tool still produces output (a broken page
+would trivially make no requests), then attempts every egress primitive and
+requires that none receives a response. Deploys fail if any gets through.
+
+`scripts/serve-static.mjs` parses the site's actual `_headers` file rather than
+restating the rules, so the verification cannot drift from what ships.
+
 ## Adding the next site
 
 The split exists so that site #2 is mostly copy:
@@ -99,7 +143,10 @@ The split exists so that site #2 is mostly copy:
 1. `packages/tools-<niche>` — the tools. Pure functions plus their SEO copy.
 2. Copy `sites/json` and swap `src/brand.ts` and the tools import in
    `src/registry.ts`.
-3. Deploy it on its own domain.
+3. Copy `wrangler.jsonc` and change the `name`; copy `public/_headers`.
+4. Copy `test/browser.mjs` and point its assertions at the new tools.
+
+The deploy workflow needs no edit — it discovers sites by listing `sites/*`.
 
 `packages/core` already carries the worker bridge and a cached WASM loader with
 a cross-origin-isolation check, which the JSON site does not need but the image,

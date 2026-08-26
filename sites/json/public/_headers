@@ -1,0 +1,20 @@
+# Served by Workers static assets. Astro copies public/ into dist/, where
+# Workers picks this file up and applies it to asset responses.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), usb=(), payment=()
+  Cross-Origin-Opener-Policy: same-origin
+
+  # connect-src 'none' is the product claim enforced by the browser rather than
+  # promised in the copy: the page is structurally unable to open a fetch, an
+  # XHR, a WebSocket or a beacon, so a future dependency cannot quietly start
+  # exfiltrating what users paste. The sites that need WASM threading will also
+  # need COEP: require-corp here, which this site deliberately does not set.
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'
+
+# Fingerprinted build output is immutable, so cache it hard.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable

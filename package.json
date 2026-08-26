@@ -7,10 +7,14 @@
     "build": "pnpm -r --filter './packages/*' build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
-    "dev:json": "pnpm --filter @tools/site-json dev"
+    "dev:json": "pnpm --filter @tools/site-json dev",
+    "build:sites": "pnpm -r --filter './sites/*' build",
+    "serve": "node scripts/serve-static.mjs",
+    "verify:egress": "node scripts/verify-egress.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "playwright": "^1.49.1"
   }
 }

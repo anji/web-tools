@@ -35,7 +35,9 @@ const categories = registry.categories();
 
     <!-- No analytics, no fonts, no third-party anything. The privacy claim on
          every page has to be true of the page itself, not just the tools. -->
-    {schemas.map((schema) => <script type="application/ld+json" set:html={schema} />)}
+    {/* is:inline is required: structured data must reach the HTML verbatim
+        rather than being bundled as a module. */}
+    {schemas.map((schema) => <script is:inline type="application/ld+json" set:html={schema} />)}
   </head>
 
   <body class="flex min-h-screen flex-col">

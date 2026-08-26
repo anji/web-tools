@@ -1,0 +1,11 @@
+{
+  // One Worker per site. The name is the only thing that changes between
+  // sites -- everything else here is boilerplate worth copying verbatim.
+  "name": "ihatejson",
+  "compatibility_date": "2026-08-25",
+  "assets": {
+    "directory": "./dist",
+    // Serve the pre-rendered 404.html rather than a bare Cloudflare error.
+    "not_found_handling": "404-page"
+  }
+}
