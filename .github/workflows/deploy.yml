@@ -17,6 +17,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -32,6 +33,7 @@ jobs:
   # it rebuilds everything; a change under sites/<name>/ rebuilds only that one.
   changed:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       sites: ${{ steps.detect.outputs.sites }}
     steps:
@@ -77,6 +79,7 @@ jobs:
     needs: [test, changed]
     if: github.event_name != 'pull_request' && needs.changed.outputs.sites != '[]'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -96,15 +99,29 @@ jobs:
       # The privacy claim is the product. Verify it against the built artefact
       # under its real headers before anything ships.
       - name: Verify no egress is possible
+        timeout-minutes: 10
         run: |
           pnpm exec playwright install --with-deps chromium
-          node scripts/serve-static.mjs "sites/${{ matrix.site }}/dist" 4330 &
+
+          # Log to a file and reap on exit, so the step does not leave an
+          # orphan for the runner to clean up after it.
+          node scripts/serve-static.mjs "sites/${{ matrix.site }}/dist" 4330 \
+            > /tmp/serve.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+
           for i in $(seq 30); do
             curl -sf -o /dev/null http://127.0.0.1:4330/ && break
             sleep 1
           done
+
           node sites/${{ matrix.site }}/test/browser.mjs http://127.0.0.1:4330
-          node scripts/verify-egress.mjs http://127.0.0.1:4330/
+
+          # Verify egress on both page shapes: the homepage most people land on,
+          # and a tool page, which is where data actually gets pasted.
+          node scripts/verify-egress.mjs \
+            http://127.0.0.1:4330/ \
+            http://127.0.0.1:4330/json/json-to-typescript/
 
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
