@@ -1,0 +1,135 @@
+---
+import { registry } from '../registry';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  path: string;
+  /** Extra JSON-LD blocks, already stringified. */
+  schemas?: string[];
+}
+
+const { title, description, path, schemas = [] } = Astro.props;
+const { brand } = registry;
+const canonical = `${brand.origin}${path}`;
+const live = registry.live();
+const planned = registry.planned();
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content={brand.name} />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    {/* No analytics, no fonts, no third-party anything. The privacy claim on
+        every page has to be true of the page itself, not just the tools. */}
+    {/* is:inline is required: structured data must reach the HTML verbatim
+        rather than being bundled as a module. */}
+    {schemas.map((schema) => <script is:inline type="application/ld+json" set:html={schema} />)}
+  </head>
+
+  <body class="flex min-h-screen flex-col">
+    <header class="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-4 py-3.5">
+        <a href="/" class="flex items-center gap-2 text-[15px] font-bold tracking-tight text-slate-50">
+          <span class="grid h-6 w-6 place-items-center rounded bg-sky-500/15 text-[11px] font-black text-sky-400">
+            L
+          </span>
+          {brand.name}
+        </a>
+
+        <nav class="hidden items-center gap-1 text-sm md:flex">
+          {live.map((section) => (
+            <a
+              href={registry.sectionPath(section)}
+              class="rounded-md px-3 py-1.5 text-slate-300 transition hover:bg-slate-800/70 hover:text-slate-50"
+            >
+              {section.name}
+            </a>
+          ))}
+          <span class="mx-1 h-4 w-px bg-slate-800"></span>
+          {planned.slice(0, 4).map((section) => (
+            <a
+              href={registry.sectionPath(section)}
+              class="rounded-md px-3 py-1.5 text-slate-500 transition hover:bg-slate-800/70 hover:text-slate-300"
+            >
+              {section.name.split(' ')[0]}
+            </a>
+          ))}
+        </nav>
+
+        {brand.repo && (
+          <a href={brand.repo} rel="noopener" class="text-sm text-slate-400 transition hover:text-slate-100">
+            Source
+          </a>
+        )}
+      </div>
+    </header>
+
+    <main class="flex-1"><slot /></main>
+
+    <footer class="border-t border-slate-800/80 bg-slate-900/30">
+      <div class="mx-auto max-w-6xl px-4 py-12">
+        <div class="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+          {live.map((section) => (
+            <div>
+              <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                {section.name}
+              </h2>
+              <ul class="space-y-2">
+                {section.tools.map((tool) => (
+                  <li>
+                    <a
+                      href={registry.toolPath(section, tool)}
+                      class="text-sm text-slate-400 transition hover:text-sky-400"
+                    >
+                      {tool.label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+
+          <div>
+            <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              In progress
+            </h2>
+            <ul class="space-y-2">
+              {planned.map((section) => (
+                <li>
+                  <a
+                    href={registry.sectionPath(section)}
+                    class="text-sm text-slate-400 transition hover:text-sky-400"
+                  >
+                    {section.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        <p class="mt-10 max-w-2xl text-xs leading-relaxed text-slate-600">
+          Every tool on {brand.name} runs in your browser. Nothing you paste or drop is uploaded,
+          stored or logged — the pages set a Content-Security-Policy of
+          <code class="text-slate-500">connect-src 'none'</code>, so your browser physically refuses
+          to let them open a network connection.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

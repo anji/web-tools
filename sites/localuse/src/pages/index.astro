@@ -1,0 +1,178 @@
+---
+import Base from '../layouts/Base.astro';
+import { registry } from '../registry';
+
+const { brand } = registry;
+const live = registry.live();
+const planned = registry.planned();
+const toolCount = registry.allTools().length;
+
+const websiteSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: brand.name,
+  url: brand.origin,
+  description: brand.description,
+});
+
+const appSchema = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: brand.name,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Any (web browser)',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  featureList: registry.allTools().map((t) => t.label),
+});
+
+const promises = [
+  {
+    title: 'Nothing is uploaded',
+    body: 'Each tool is a pure function running in your tab. The pages ship a Content-Security-Policy that forbids network connections outright, so this is enforced by your browser rather than promised by us.',
+  },
+  {
+    title: 'No account, no limits',
+    body: 'No sign-up, no file cap, no watermark, no "upgrade to convert more than three files". There is no server to meter.',
+  },
+  {
+    title: 'Works offline',
+    body: 'Load a page once, then turn off your network. Everything keeps working — which is the only demonstration of the first point that actually counts.',
+  },
+];
+---
+
+<Base
+  title={`${brand.name} — ${brand.tagline}`}
+  description={brand.description}
+  path="/"
+  schemas={[websiteSchema, appSchema]}
+>
+  <section class="relative overflow-hidden border-b border-slate-800/80">
+    <div
+      class="pointer-events-none absolute inset-0 opacity-40"
+      style="background: radial-gradient(60rem 30rem at 15% -10%, rgba(56,189,248,0.16), transparent 60%);"
+    >
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-4 py-20 sm:py-28">
+      <p class="mb-5 inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+        {toolCount} tools live · nothing leaves your machine
+      </p>
+
+      <h1 class="max-w-3xl text-4xl font-bold leading-[1.1] tracking-tight text-slate-50 sm:text-6xl">
+        Developer tools that
+        <span class="text-sky-400">never see your data</span>
+      </h1>
+
+      <p class="mt-6 max-w-2xl text-lg leading-relaxed text-slate-400">
+        Paste the API response with the live bearer token in it. Drop the export with real customer
+        emails. It stays on your machine, because there is nowhere for it to go.
+      </p>
+
+      <div class="mt-9 flex flex-wrap gap-3">
+        {live.map((section) => (
+          <a
+            href={registry.sectionPath(section)}
+            class="rounded-md bg-sky-500 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-sky-400"
+          >
+            {section.name} tools
+          </a>
+        ))}
+        <a
+          href="#how"
+          class="rounded-md border border-slate-700 px-5 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-slate-500"
+        >
+          How we prove it
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-6xl px-4 py-16">
+    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Available now</h2>
+    {/* One live section should not sit stranded in half a two-column grid; it
+        goes full width and shows its whole tool list instead. */}
+    <div class={live.length > 1 ? 'mt-6 grid gap-4 lg:grid-cols-2' : 'mt-6 grid gap-4'}>
+      {live.map((section) => (
+        <div class="rounded-xl border border-slate-800 bg-slate-900/40 p-6 transition hover:border-sky-800/80">
+          <div class="flex items-baseline justify-between gap-4">
+            <a href={registry.sectionPath(section)} class="group">
+              <h3 class="text-xl font-semibold text-slate-100 transition group-hover:text-sky-400">
+                {section.name}
+              </h3>
+            </a>
+            <span class="shrink-0 text-xs text-slate-500">{section.tools.length} tools</span>
+          </div>
+          <p class="mt-2 text-sm leading-relaxed text-slate-400">{section.tagline}</p>
+          <div class="mt-4 flex flex-wrap gap-1.5">
+            {section.tools.slice(0, live.length > 1 ? 6 : 99).map((tool) => (
+              <a
+                href={registry.toolPath(section, tool)}
+                class="rounded border border-slate-800 bg-slate-950/60 px-2 py-1 text-xs text-slate-400 transition hover:border-sky-800 hover:text-sky-400"
+              >
+                {tool.label}
+              </a>
+            ))}
+            {live.length > 1 && section.tools.length > 6 && (
+              <span class="px-2 py-0.5 text-xs text-slate-600">
+                +{section.tools.length - 6} more
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <section class="mx-auto max-w-6xl px-4 pb-16">
+    <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500">Being built</h2>
+    <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-500">
+      We have not built these yet, so each one points at whoever does it best today — labelled with
+      whether it actually runs on your device. These pages get replaced by our own tools, at the
+      same address.
+    </p>
+    <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {planned.map((section) => (
+        <a
+          href={registry.sectionPath(section)}
+          class="group rounded-lg border border-slate-800/70 bg-slate-900/20 p-5 transition hover:border-slate-700 hover:bg-slate-900/50"
+        >
+          <div class="flex items-baseline justify-between gap-3">
+            <h3 class="font-semibold text-slate-300 transition group-hover:text-slate-100">
+              {section.name}
+            </h3>
+            <span class="shrink-0 text-[11px] uppercase tracking-wide text-slate-600">
+              {section.recommendations && section.recommendations.length > 0 ? 'curated' : 'next up'}
+            </span>
+          </div>
+          <p class="mt-2 text-sm leading-relaxed text-slate-500">{section.tagline}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+
+  <section id="how" class="scroll-mt-20 border-t border-slate-800/80 bg-slate-900/30">
+    <div class="mx-auto max-w-6xl px-4 py-16">
+      <h2 class="text-2xl font-bold text-slate-100">How we prove it</h2>
+      <div class="mt-8 grid gap-8 sm:grid-cols-3">
+        {promises.map((promise) => (
+          <div>
+            <h3 class="font-semibold text-slate-100">{promise.title}</h3>
+            <p class="mt-2 text-sm leading-relaxed text-slate-400">{promise.body}</p>
+          </div>
+        ))}
+      </div>
+      <p class="mt-8 max-w-3xl text-sm leading-relaxed text-slate-500">
+        Every deploy runs an automated check that loads a real page, confirms the tools still work,
+        then tries to exfiltrate data by every means a browser offers — fetch, XHR, WebSocket,
+        beacon, remote module, image pixel. If any of them gets a response, the deploy fails.
+        {brand.repo && (
+          <>
+            {' '}The check is <a href={brand.repo} rel="noopener" class="text-sky-400 underline underline-offset-2 hover:text-sky-300">in the repo</a>.
+          </>
+        )}
+      </p>
+    </div>
+  </section>
+</Base>

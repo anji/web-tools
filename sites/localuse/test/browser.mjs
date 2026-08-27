@@ -40,7 +40,7 @@ const type = async (sel, text) => {
 const output = async () => (await page.textContent('pre code').catch(() => '')) ?? '';
 
 // --- JSON -> TypeScript
-await page.goto(`${BASE}/json-to-typescript/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/json-to-typescript/`, { waitUntil: 'networkidle' });
 await check('json-to-typescript generates interfaces with optional + nullable', async () => {
   await type('textarea', JSON.stringify([
     { id: 1, name: 'Ada', team: { name: 'Core' }, bio: null },
@@ -59,7 +59,7 @@ await check('option toggle re-runs the tool', async () => {
 });
 
 // --- Formatter error reporting
-await page.goto(`${BASE}/json-formatter/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/json-formatter/`, { waitUntil: 'networkidle' });
 await check('formatter explains a trailing comma with a line number', async () => {
   await type('textarea', '{\n  "a": 1,\n}');
   const body = await page.textContent('body');
@@ -73,7 +73,7 @@ await check('formatter reports stats on valid input', async () => {
 });
 
 // --- Diff (two inputs)
-await page.goto(`${BASE}/json-diff/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/json-diff/`, { waitUntil: 'networkidle' });
 await check('diff renders two input panes and compares them', async () => {
   const areas = await page.locator('textarea').count();
   if (areas !== 2) throw new Error('expected 2 textareas, got ' + areas);
@@ -86,7 +86,7 @@ await check('diff renders two input panes and compares them', async () => {
 });
 
 // --- JSONPath
-await page.goto(`${BASE}/jsonpath-tester/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/jsonpath-tester/`, { waitUntil: 'networkidle' });
 await check('jsonpath filter expression evaluates', async () => {
   await type('textarea', '{"items":[{"sku":"A1","price":5},{"sku":"B2","price":25}]}');
   const pathInput = page.locator('input[type="text"]').first();
@@ -97,7 +97,7 @@ await check('jsonpath filter expression evaluates', async () => {
 });
 
 // --- Redaction
-await page.goto(`${BASE}/json-redact-secrets/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/json-redact-secrets/`, { waitUntil: 'networkidle' });
 await check('secret scanner masks by key name, by value shape, and PII', async () => {
   // Deliberately no vendor-prefixed token here: a realistic one trips GitHub's
   // own push protection, and these two cover both detection paths anyway --
@@ -112,7 +112,7 @@ await check('secret scanner masks by key name, by value shape, and PII', async (
 });
 
 // --- CSV
-await page.goto(`${BASE}/json-to-csv/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/json-to-csv/`, { waitUntil: 'networkidle' });
 await check('csv flattens nested objects and unions columns', async () => {
   await type('textarea', '[{"id":1,"team":{"name":"Core"}},{"id":2,"extra":true}]');
   const out = await output();
@@ -120,15 +120,54 @@ await check('csv flattens nested objects and unions columns', async () => {
 });
 
 // --- SEO / privacy assertions
-await page.goto(`${BASE}/json-to-zod/`, { waitUntil: 'networkidle' });
+await page.goto(`${BASE}/json/json-to-zod/`, { waitUntil: 'networkidle' });
 await check('tool page carries canonical, description and FAQ JSON-LD', async () => {
   const canonical = await page.getAttribute('link[rel=canonical]', 'href');
-  if (canonical !== 'https://ihatejson.com/json-to-zod/') throw new Error('canonical: ' + canonical);
+  if (canonical !== 'https://localuse.dev/json/json-to-zod/') throw new Error('canonical: ' + canonical);
   const desc = await page.getAttribute('meta[name=description]', 'content');
   if (!desc || desc.length < 50) throw new Error('missing description');
   const ld = await page.locator('script[type="application/ld+json"]').allTextContents();
   if (!ld.some((s) => s.includes('FAQPage'))) throw new Error('no FAQPage schema');
   if (!ld.some((s) => s.includes('BreadcrumbList'))) throw new Error('no breadcrumbs');
+});
+
+// --- Hub navigation and the curated placeholder sections
+await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+await check('homepage lists the live section and links into it', async () => {
+  const link = page.locator('a[href="/json/"]').first();
+  if ((await page.locator('a[href="/json/"]').count()) === 0) throw new Error('no link to /json/');
+  await link.click();
+  await page.waitForLoadState('networkidle');
+  if (!page.url().includes('/json/')) throw new Error('did not navigate: ' + page.url());
+  const body = await page.textContent('body');
+  if (!body.includes('JSON tools')) throw new Error('section page missing heading');
+});
+
+await check('section page links to each of its tools', async () => {
+  const links = await page.locator('a[href^="/json/json-"], a[href^="/json/jsonpath"], a[href^="/json/yaml-"]').count();
+  if (links < 12) throw new Error(`expected >=12 tool links, got ${links}`);
+});
+
+await page.goto(`${BASE}/pdf/`, { waitUntil: 'networkidle' });
+await check('planned section labels externals and marks them as off-site', async () => {
+  const body = await page.textContent('body');
+  if (!/have not built this section yet/i.test(body)) throw new Error('missing not-built notice');
+  if (!body.includes('runs locally')) throw new Error('missing local label');
+  const ext = page.locator('a[href^="https://www.ihatepdf.cv"]').first();
+  if ((await ext.count()) === 0) throw new Error('recommendation link missing');
+  if ((await ext.getAttribute('rel')) !== 'noopener') throw new Error('external link missing rel=noopener');
+});
+
+await check('planned section honestly flags a non-local recommendation', async () => {
+  await page.goto(`${BASE}/regex/`, { waitUntil: 'networkidle' });
+  const body = await page.textContent('body');
+  if (!body.includes('sends to a server')) throw new Error('non-local tool not flagged');
+});
+
+await check('a section with no recommendations still says something useful', async () => {
+  await page.goto(`${BASE}/csv/`, { waitUntil: 'networkidle' });
+  const body = await page.textContent('body');
+  if (!/next on the list/i.test(body)) throw new Error('empty section has no copy');
 });
 
 await check('no third-party network requests from any page', async () => {

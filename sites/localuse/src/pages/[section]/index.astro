@@ -1,0 +1,164 @@
+---
+import Base from '../../layouts/Base.astro';
+import { registry } from '../../registry';
+
+export function getStaticPaths() {
+  return registry.sections.map((section) => ({
+    params: { section: section.slug },
+    props: { slug: section.slug },
+  }));
+}
+
+const { slug } = Astro.props;
+const section = registry.section(slug)!;
+const { brand } = registry;
+const isLive = section.tools.length > 0;
+
+// Group this section's tools by their own category, e.g. Format / Convert.
+const categories: Array<{ name: string; tools: typeof section.tools }> = [];
+for (const tool of section.tools) {
+  const found = categories.find((c) => c.name === tool.category);
+  if (found) (found.tools as any).push(tool);
+  else categories.push({ name: tool.category, tools: [tool] as any });
+}
+
+const breadcrumb = JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: brand.name, item: `${brand.origin}/` },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: section.name,
+      item: brand.origin + registry.sectionPath(section),
+    },
+  ],
+});
+
+const listSchema = isLive
+  ? JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      name: `${section.name} tools`,
+      itemListElement: section.tools.map((tool, i) => ({
+        '@type': 'ListItem',
+        position: i + 1,
+        name: tool.label,
+        url: brand.origin + registry.toolPath(section, tool),
+      })),
+    })
+  : undefined;
+---
+
+<Base
+  title={`${section.name} tools — ${brand.name}`}
+  description={section.description}
+  path={registry.sectionPath(section)}
+  schemas={[breadcrumb, ...(listSchema ? [listSchema] : [])]}
+>
+  <div class="mx-auto max-w-6xl px-4 py-12">
+    <nav class="mb-6 text-sm text-slate-500">
+      <a href="/" class="transition hover:text-slate-300">{brand.name}</a>
+      <span class="mx-2">/</span>
+      <span class="text-slate-400">{section.name}</span>
+    </nav>
+
+    <h1 class="text-3xl font-bold tracking-tight text-slate-50 sm:text-4xl">
+      {section.name} tools
+    </h1>
+    <p class="mt-4 max-w-3xl text-base leading-relaxed text-slate-400">{section.intro}</p>
+
+    {isLive ? (
+      <div class="mt-12">
+        {categories.map((category) => (
+          <div class="mb-10">
+            <h2 class="mb-5 text-sm font-semibold uppercase tracking-wider text-slate-500">
+              {category.name}
+            </h2>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {category.tools.map((tool) => (
+                <a
+                  href={registry.toolPath(section, tool)}
+                  class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-sky-800 hover:bg-slate-900"
+                >
+                  <h3 class="font-semibold text-slate-100 transition group-hover:text-sky-400">
+                    {tool.label}
+                  </h3>
+                  <p class="mt-2 text-sm leading-relaxed text-slate-400">{tool.blurb}</p>
+                </a>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div class="mt-12">
+        <div class="rounded-lg border border-amber-900/40 bg-amber-950/15 px-5 py-4">
+          <p class="text-sm leading-relaxed text-amber-200/80">
+            We have not built this section yet. Rather than leave the page empty, here is what we
+            would use in the meantime — and whether it actually runs on your device.
+          </p>
+        </div>
+
+        {section.recommendations && section.recommendations.length > 0 ? (
+          <>
+            <div class="mt-8 grid gap-4 sm:grid-cols-2">
+              {section.recommendations.map((rec) => (
+                <a
+                  href={rec.href}
+                  rel="noopener"
+                  class="group rounded-lg border border-slate-800 bg-slate-900/40 p-5 transition hover:border-slate-600"
+                >
+                  <div class="flex items-start justify-between gap-3">
+                    <h2 class="font-semibold text-slate-100 transition group-hover:text-sky-400">
+                      {rec.name}
+                      <span class="ml-1.5 text-xs font-normal text-slate-600">↗</span>
+                    </h2>
+                    <span
+                      class={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${
+                        rec.local
+                          ? 'border-emerald-900/60 bg-emerald-950/40 text-emerald-300/90'
+                          : 'border-slate-700 bg-slate-800/50 text-slate-400'
+                      }`}
+                    >
+                      {rec.label ?? (rec.local ? 'runs locally' : 'sends to a server')}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-sm leading-relaxed text-slate-400">{rec.blurb}</p>
+                </a>
+              ))}
+            </div>
+
+            <p class="mt-6 max-w-3xl text-xs leading-relaxed text-slate-600">
+              These are other people's tools and we do not control them. The labels reflect our
+              reading of how each one works at the time of writing — if you are about to hand over
+              something sensitive, verify it yourself rather than taking our word, or anyone's.
+            </p>
+          </>
+        ) : (
+          <p class="mt-8 max-w-2xl text-sm leading-relaxed text-slate-400">
+            This one is next on the list, and we have not found a local-first option good enough to
+            send you to in the meantime. That gap is roughly the point.
+          </p>
+        )}
+
+        <div class="mt-12 rounded-lg border border-slate-800 bg-slate-900/30 p-6">
+          <h2 class="font-semibold text-slate-100">What will replace this</h2>
+          <p class="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">
+            {section.description} When those ship they will appear on this page, at this address —
+            so a bookmark or a link you share now keeps working.
+          </p>
+          {registry.live()[0] && (
+            <a
+              href={registry.sectionPath(registry.live()[0]!)}
+              class="mt-4 inline-block text-sm text-sky-400 transition hover:text-sky-300"
+            >
+              See what the finished sections look like →
+            </a>
+          )}
+        </div>
+      </div>
+    )}
+  </div>
+</Base>

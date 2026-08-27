@@ -1,6 +1,6 @@
 import type { OptionValues, ToolOutput } from './tool.js';
 import type { Result } from './result.js';
-import type { ToolRegistry } from './registry.js';
+import type { SiteRegistry } from './registry.js';
 
 /**
  * Tool functions are pure, but they are not structured-cloneable, so we cannot
@@ -21,10 +21,10 @@ export interface ToolResponse {
 }
 
 /** Worker side: wire a registry up to `self.onmessage`. */
-export function serveToolRequests(registry: ToolRegistry, scope: DedicatedWorkerGlobalScope): void {
+export function serveToolRequests(registry: SiteRegistry, scope: DedicatedWorkerGlobalScope): void {
   scope.onmessage = (event: MessageEvent<ToolRequest>) => {
     const { requestId, toolId, inputs, options } = event.data;
-    const tool = registry.tools.find((t) => t.id === toolId);
+    const tool = registry.allTools().find((t) => t.id === toolId);
     const result: Result<ToolOutput> = tool
       ? tool.run(inputs, options)
       : { ok: false, error: { message: `Unknown tool: ${toolId}` } };

@@ -2,6 +2,8 @@
 import Base from '../layouts/Base.astro';
 import { registry } from '../registry';
 const { brand } = registry;
+const suggestions = registry.allTools().slice(0, 6);
+const live = registry.live();
 ---
 
 <Base title={`Not found — ${brand.name}`} description="That page does not exist." path="/404">
@@ -9,14 +11,17 @@ const { brand } = registry;
     <h1 class="text-3xl font-bold text-slate-100">That page does not exist</h1>
     <p class="mt-4 text-slate-400">The tool you were after might be under a different name.</p>
     <div class="mt-8 flex flex-wrap justify-center gap-3">
-      {registry.tools.slice(0, 6).map((tool) => (
-        <a
-          href={`/${tool.slug}/`}
-          class="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-sky-700 hover:text-sky-400"
-        >
-          {tool.label}
-        </a>
-      ))}
+      {suggestions.map((tool) => {
+        const section = live.find((s) => s.tools.includes(tool))!;
+        return (
+          <a
+            href={registry.toolPath(section, tool)}
+            class="rounded-md border border-slate-700 px-4 py-2 text-sm text-slate-300 transition hover:border-sky-700 hover:text-sky-400"
+          >
+            {tool.label}
+          </a>
+        );
+      })}
     </div>
   </div>
 </Base>

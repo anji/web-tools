@@ -10,8 +10,25 @@ The first site is a JSON toolbox with twelve tools.
 packages/core        the tool contract, worker bridge, WASM loader, registry
 packages/ui          the React shell every tool's UI is rendered from
 packages/tools-json  the twelve JSON tools and the engines behind them
-sites/json           the deployable Astro site (12 pages + sitemap + robots)
+sites/localuse       the deployed site: localuse.dev
 ```
+
+## Site structure
+
+One domain, sections as subdirectories — `localuse.dev/json/json-to-typescript`.
+Subdirectories rather than subdomains because Google largely treats a subdomain
+as a separate site, and a new domain has too little authority to spend splitting
+it up.
+
+A **section** is a niche. A section with tools is ours. A section without them is
+a placeholder that links to whoever does it best today, each recommendation
+labelled with whether it actually runs on the reader's device — including when
+the honest answer is no. Those pages get replaced by our own tools *at the same
+URL*, so links shared while a section is a placeholder keep working.
+
+That placeholder state is not filler. It makes the hub useful on day one instead
+of after niche number five, and the local/not-local labelling is itself the
+thing no other tool directory offers.
 
 ## Why it is split this way
 
@@ -76,7 +93,7 @@ substring assertions cannot catch a duplicate identifier or a forward
 reference — the exact class of bug that shipped in the first draft of the
 naming pass.
 
-The browser checks live in `sites/json`. The load-bearing one asserts that a
+The browser checks live in `sites/localuse/test`. The load-bearing one asserts that a
 full session across every tool makes **zero third-party network requests**. If
 that ever fails, the product's central claim is false, so it is a test rather
 than a policy.
@@ -85,12 +102,13 @@ than a policy.
 
 ```
 pnpm install
-pnpm --filter @tools/site-json dev
-pnpm --filter @tools/site-json build     # static output in sites/json/dist
+pnpm dev                                   # localuse.dev, locally
+pnpm --filter @tools/site-localuse build   # static output in sites/localuse/dist
 ```
 
-The build is fully static: 12 pre-rendered tool pages, a homepage, a 404, a
-sitemap and a robots.txt. It deploys to any static host.
+The build is fully static: 21 pre-rendered pages — 12 tools, 7 section landings,
+a homepage and a 404 — plus a sitemap and robots.txt. It deploys to any static
+host.
 
 ## Deploying
 
@@ -141,8 +159,13 @@ restating the rules, so the verification cannot drift from what ships.
 The split exists so that site #2 is mostly copy:
 
 1. `packages/tools-<niche>` — the tools. Pure functions plus their SEO copy.
-2. Copy `sites/json` and swap `src/brand.ts` and the tools import in
-   `src/registry.ts`.
+2. Add them to the matching section in `sites/localuse/src/sections.ts`. The
+   section stops being a placeholder the moment `tools` is non-empty; the
+   homepage, nav, footer and sitemap all follow automatically.
+
+To give a niche its own domain later instead, the same tools package plugs into
+a new `sites/<name>/` with its own `brand.ts` — which is why the tools never
+import anything site-specific.
 3. Copy `wrangler.jsonc` and change the `name`; copy `public/_headers`.
 4. Copy `test/browser.mjs` and point its assertions at the new tools.
 

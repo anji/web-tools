@@ -1,16 +1,23 @@
 ---
-import Base from '../layouts/Base.astro';
-import JsonTool from '../components/JsonTool';
-import { registry } from '../registry';
+import Base from '../../layouts/Base.astro';
+import ToolIsland from '../../components/ToolIsland';
+import { registry } from '../../registry';
 
 export function getStaticPaths() {
-  return registry.tools.map((tool) => ({ params: { slug: tool.slug }, props: { toolId: tool.id } }));
+  return registry.sections.flatMap((section) =>
+    section.tools.map((tool) => ({
+      params: { section: section.slug, tool: tool.slug },
+      props: { sectionSlug: section.slug, toolId: tool.id },
+    })),
+  );
 }
 
-const { toolId } = Astro.props;
-const tool = registry.tools.find((t) => t.id === toolId)!;
+const { sectionSlug, toolId } = Astro.props;
+const section = registry.section(sectionSlug)!;
+const tool = section.tools.find((t) => t.id === toolId)!;
 const { brand } = registry;
-const related = registry.tools.filter((t) => t.id !== tool.id && t.category === tool.category);
+const path = registry.toolPath(section, tool);
+const related = section.tools.filter((t) => t.id !== tool.id && t.category === tool.category);
 
 const appSchema = JSON.stringify({
   '@context': 'https://schema.org',
@@ -19,7 +26,7 @@ const appSchema = JSON.stringify({
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'Any (web browser)',
   description: tool.seo.description,
-  url: `${brand.origin}/${tool.slug}/`,
+  url: brand.origin + path,
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
 });
 
@@ -42,22 +49,27 @@ const breadcrumbSchema = JSON.stringify({
   '@type': 'BreadcrumbList',
   itemListElement: [
     { '@type': 'ListItem', position: 1, name: brand.name, item: `${brand.origin}/` },
-    { '@type': 'ListItem', position: 2, name: tool.label, item: `${brand.origin}/${tool.slug}/` },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: section.name,
+      item: brand.origin + registry.sectionPath(section),
+    },
+    { '@type': 'ListItem', position: 3, name: tool.label, item: brand.origin + path },
   ],
 });
 
 const schemas = [appSchema, breadcrumbSchema, ...(faqSchema ? [faqSchema] : [])];
 ---
 
-<Base
-  title={tool.seo.title}
-  description={tool.seo.description}
-  path={`/${tool.slug}/`}
-  schemas={schemas}
->
+<Base title={tool.seo.title} description={tool.seo.description} path={path} schemas={schemas}>
   <div class="mx-auto max-w-6xl px-4 py-10">
     <nav class="mb-6 text-sm text-slate-500">
       <a href="/" class="transition hover:text-slate-300">{brand.name}</a>
+      <span class="mx-2">/</span>
+      <a href={registry.sectionPath(section)} class="transition hover:text-slate-300">
+        {section.name}
+      </a>
       <span class="mx-2">/</span>
       <span class="text-slate-400">{tool.label}</span>
     </nav>
@@ -66,7 +78,7 @@ const schemas = [appSchema, breadcrumbSchema, ...(faqSchema ? [faqSchema] : [])]
     <p class="mt-4 max-w-3xl text-base leading-relaxed text-slate-400">{tool.seo.intro}</p>
 
     <div class="mt-8">
-      <JsonTool client:load toolId={tool.id} />
+      <ToolIsland client:load toolId={tool.id} />
     </div>
 
     <p class="mt-4 text-xs text-slate-600">
@@ -95,7 +107,7 @@ const schemas = [appSchema, breadcrumbSchema, ...(faqSchema ? [faqSchema] : [])]
         <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {related.map((other) => (
             <a
-              href={`/${other.slug}/`}
+              href={registry.toolPath(section, other)}
               class="group rounded-lg border border-slate-800 bg-slate-900/40 p-4 transition hover:border-sky-800"
             >
               <h3 class="text-sm font-semibold text-slate-200 transition group-hover:text-sky-400">
