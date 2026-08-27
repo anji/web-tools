@@ -123,10 +123,22 @@ jobs:
             http://127.0.0.1:4330/ \
             http://127.0.0.1:4330/json/json-to-typescript/
 
+      # Validates wrangler.jsonc and the asset directory without credentials,
+      # so a config mistake fails here rather than half way through a deploy.
+      - name: Check the Worker config
+        working-directory: sites/${{ matrix.site }}
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: pnpm exec wrangler deploy --dry-run
+
+      # Deliberately not cloudflare/wrangler-action: it shells out to
+      # `npm i wrangler`, and npm cannot parse the `workspace:*` protocol this
+      # monorepo uses, so it fails before it ever reaches Cloudflare. Running
+      # our own dependency also pins the version through the lockfile.
       - name: Deploy to Cloudflare Workers
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: sites/${{ matrix.site }}
-          command: deploy
+        working-directory: sites/${{ matrix.site }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: pnpm exec wrangler deploy
