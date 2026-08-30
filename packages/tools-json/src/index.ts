@@ -11,6 +11,9 @@ export * from './redact.js';
 export * from './emit-typescript.js';
 export * from './emit-zod.js';
 export * from './emit-json-schema.js';
+export * from './emit-go.js';
+export * from './emit-csharp.js';
+export * from './emit-python.js';
 
 import { formatTools } from './tools-format.js';
 import { codegenTools } from './tools-codegen.js';

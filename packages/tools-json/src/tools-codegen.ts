@@ -12,6 +12,9 @@ import { inferSchema } from './schema.js';
 import { emitTypeScript } from './emit-typescript.js';
 import { emitZod } from './emit-zod.js';
 import { emitJsonSchema } from './emit-json-schema.js';
+import { emitGo } from './emit-go.js';
+import { emitCSharp } from './emit-csharp.js';
+import { emitPython } from './emit-python.js';
 
 const JSON_INPUT = {
   label: 'JSON',
@@ -243,4 +246,281 @@ const jsonSchemaTool = defineTool({
   },
 });
 
-export const codegenTools = [typescriptTool, zodTool, jsonSchemaTool];
+const CORRECTNESS_FAQ = {
+  question: 'Why does this produce different types than other converters?',
+  answer:
+    'Because every element of the array is merged before anything is generated. A converter that reads only the first record cannot know that a field is missing from later ones, or that it is sometimes null, so it emits a plain non-nullable type. In a statically typed language that is not a cosmetic difference: it is the line between a clean decode and a nil dereference at runtime.',
+};
+
+const goTool = defineTool({
+  id: 'to-go',
+  slug: 'json-to-go',
+  label: 'JSON → Go',
+  blurb: 'Generate Go structs with json tags, pointers for optional fields, and gofmt spacing.',
+  category: 'Code generation',
+  seo: {
+    title: 'JSON to Go Struct Generator - Correct Pointers, gofmt Output',
+    description:
+      'Convert JSON to Go structs in your browser. Merges every array element so optional and null fields become pointers, applies Go initialism conventions (ID, URL, API), and emits gofmt-formatted output. No upload.',
+    heading: 'JSON to Go',
+    intro:
+      'Paste a JSON response and get Go structs you can paste straight into a file. Fields that are optional or nullable become pointers, so you keep the difference between absent, null and the zero value.',
+    keywords: [
+      'json to go',
+      'json to go struct',
+      'go struct generator',
+      'json to golang struct',
+      'generate go types from json',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      SAMPLES_FAQ,
+      CORRECTNESS_FAQ,
+      {
+        question: 'Why are some fields pointers?',
+        answer:
+          'Because a plain string cannot represent absence. If the API omits a field, or sends null, a string field silently decodes to "" and your code cannot tell that apart from an empty value the server really sent. A *string can. Only fields that were actually missing or null in your sample get one, so the output does not turn into pointers everywhere.',
+      },
+      {
+        question: 'Why is it ID and not Id?',
+        answer:
+          'Go convention capitalises initialisms whole - ID, URL, API, HTTP, UUID - and linters flag the alternative. The generator applies the same list golint used, so an api_url key becomes APIURL rather than ApiUrl.',
+      },
+      {
+        question: 'Do I need to run gofmt on the output?',
+        answer:
+          'No. The field name, type and tag columns are aligned exactly as gofmt would align them, which is checked against the real gofmt binary in this project\u2019s tests.',
+      },
+    ],
+  },
+  inputs: [JSON_INPUT] as const,
+  options: [
+    { kind: 'text', key: 'rootName', label: 'Root type name', default: 'Root', placeholder: 'Root' },
+    { kind: 'text', key: 'packageName', label: 'Package', default: 'main', placeholder: 'main' },
+    { kind: 'boolean', key: 'usePointers', label: 'Pointers for optional', default: true, help: 'Keeps absent and null distinguishable.' },
+    { kind: 'boolean', key: 'omitempty', label: 'omitempty tags', default: true },
+    {
+      kind: 'select',
+      key: 'intType',
+      label: 'Integers',
+      choices: [
+        { value: 'int64', label: 'int64' },
+        { value: 'int', label: 'int' },
+      ],
+      default: 'int64',
+    },
+    { kind: 'boolean', key: 'useTimeType', label: 'time.Time for timestamps', default: false },
+    { kind: 'boolean', key: 'useAnyKeyword', label: 'any instead of interface{}', default: true, help: 'Go 1.18+' },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const parsed = parseJson(inputs[0] ?? '');
+    if (!parsed.ok) return parsed;
+
+    const result = emitGo(inferSchema(parsed.value), {
+      rootName: readString(options, 'rootName', 'Root') || 'Root',
+      packageName: readString(options, 'packageName', 'main'),
+      usePointers: readBoolean(options, 'usePointers', true),
+      omitempty: readBoolean(options, 'omitempty', true),
+      intType: readString(options, 'intType', 'int64') === 'int' ? 'int' : 'int64',
+      useTimeType: readBoolean(options, 'useTimeType', false),
+      useAnyKeyword: readBoolean(options, 'useAnyKeyword', true),
+    });
+
+    return ok({
+      content: result.code,
+      language: 'text',
+      filename: 'types.go',
+      stats: [{ label: 'structs', value: String(result.typeCount) }],
+      warnings: result.warnings,
+    });
+  },
+});
+
+const csharpTool = defineTool({
+  id: 'to-csharp',
+  slug: 'json-to-csharp',
+  label: 'JSON → C#',
+  blurb: 'Generate C# classes or records with nullable annotations and serializer attributes.',
+  category: 'Code generation',
+  seo: {
+    title: 'JSON to C# Class Generator - Nullable-Aware, No Upload',
+    description:
+      'Convert JSON to C# classes or records in your browser. Merges every array element so optional and null fields get nullable annotations, adds System.Text.Json or Newtonsoft attributes, and maps UUIDs and timestamps to Guid and DateTime.',
+    heading: 'JSON to C#',
+    intro:
+      'Paste a JSON response and get C# classes or records. Fields the payload can omit or send as null are annotated nullable, so the compiler warns you before a NullReferenceException does.',
+    keywords: [
+      'json to c#',
+      'json to csharp class',
+      'json to c# class generator',
+      'convert json to c# model',
+      'json to record c#',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      SAMPLES_FAQ,
+      CORRECTNESS_FAQ,
+      {
+        question: 'Which serializer are the attributes for?',
+        answer:
+          'System.Text.Json by default, which is what modern .NET uses; switch to Newtonsoft if the project is on Json.NET, or turn attributes off entirely. The attribute preserves the original JSON key so the property can follow C# naming without breaking deserialisation.',
+      },
+      {
+        question: 'What does "nullable reference types" change?',
+        answer:
+          'It emits string? rather than string for fields the payload can send as null. Without it the field still receives null at runtime - the compiler just stops warning you, which is how the exception ends up in production instead of in your editor.',
+      },
+      {
+        question: 'Why was one of my properties renamed?',
+        answer:
+          'C# does not allow a member with the same name as its enclosing type, so a payload like {"user": {"user": ...}} would not compile. That property gets a suffix, and the serializer attribute still points at the original key.',
+      },
+    ],
+  },
+  inputs: [JSON_INPUT] as const,
+  options: [
+    { kind: 'text', key: 'rootName', label: 'Root type name', default: 'Root', placeholder: 'Root' },
+    { kind: 'text', key: 'namespace', label: 'Namespace', default: '', placeholder: 'MyApp.Models' },
+    {
+      kind: 'select',
+      key: 'style',
+      label: 'Style',
+      choices: [
+        { value: 'class', label: 'class' },
+        { value: 'record', label: 'record' },
+      ],
+      default: 'class',
+    },
+    {
+      kind: 'select',
+      key: 'serializer',
+      label: 'Attributes',
+      choices: [
+        { value: 'system-text-json', label: 'System.Text.Json' },
+        { value: 'newtonsoft', label: 'Newtonsoft.Json' },
+        { value: 'none', label: 'None' },
+      ],
+      default: 'system-text-json',
+    },
+    { kind: 'boolean', key: 'nullableRefTypes', label: 'Nullable reference types', default: true },
+    {
+      kind: 'select',
+      key: 'intType',
+      label: 'Integers',
+      choices: [
+        { value: 'long', label: 'long' },
+        { value: 'int', label: 'int' },
+      ],
+      default: 'long',
+    },
+    { kind: 'boolean', key: 'useRichTypes', label: 'Guid and DateTime', default: true },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const parsed = parseJson(inputs[0] ?? '');
+    if (!parsed.ok) return parsed;
+
+    const serializerRaw = readString(options, 'serializer', 'system-text-json');
+    const result = emitCSharp(inferSchema(parsed.value), {
+      rootName: readString(options, 'rootName', 'Root') || 'Root',
+      namespace: readString(options, 'namespace', ''),
+      style: readString(options, 'style', 'class') === 'record' ? 'record' : 'class',
+      serializer:
+        serializerRaw === 'newtonsoft' || serializerRaw === 'none'
+          ? serializerRaw
+          : 'system-text-json',
+      nullableRefTypes: readBoolean(options, 'nullableRefTypes', true),
+      intType: readString(options, 'intType', 'long') === 'int' ? 'int' : 'long',
+      useRichTypes: readBoolean(options, 'useRichTypes', true),
+    });
+
+    return ok({
+      content: result.code,
+      language: 'text',
+      filename: 'Models.cs',
+      stats: [{ label: 'types', value: String(result.typeCount) }],
+      warnings: result.warnings,
+    });
+  },
+});
+
+const pythonTool = defineTool({
+  id: 'to-python',
+  slug: 'json-to-python',
+  label: 'JSON → Python',
+  blurb: 'Generate Pydantic models or dataclasses, with aliases and correct field ordering.',
+  category: 'Code generation',
+  seo: {
+    title: 'JSON to Python - Pydantic Models and Dataclasses, No Upload',
+    description:
+      'Convert JSON to Pydantic v2 models or Python dataclasses in your browser. Merges every array element for correct Optional types, snake_cases keys with aliases, and orders fields so dataclasses actually import.',
+    heading: 'JSON to Python',
+    intro:
+      'Paste a JSON response and get Pydantic v2 models or plain dataclasses. Keys are converted to snake_case with the original preserved as an alias, and fields are ordered so the result imports without a TypeError.',
+    keywords: [
+      'json to python',
+      'json to pydantic',
+      'json to dataclass',
+      'generate pydantic model from json',
+      'json to python class',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      SAMPLES_FAQ,
+      CORRECTNESS_FAQ,
+      {
+        question: 'Pydantic or dataclasses?',
+        answer:
+          'Pydantic if you are parsing JSON, because it validates the payload and applies the field aliases for you. Dataclasses if you only want a typed container and are decoding some other way - they are stdlib, with no dependency, but they do not map JSON keys or check types at all.',
+      },
+      {
+        question: 'Why were my fields reordered?',
+        answer:
+          'A dataclass cannot declare a field with a default before one without; Python raises "non-default argument follows default argument" when the module is imported. Optional fields carry a None default, so they are emitted after the required ones. Knowing which fields are genuinely optional is what makes that possible.',
+      },
+      {
+        question: 'What happened to my _id field?',
+        answer:
+          'It becomes id with alias="_id". Pydantic treats a leading underscore as a private attribute and rejects the model outright, so the Mongo-style key has to be renamed - the alias keeps parsing the original document unchanged.',
+      },
+    ],
+  },
+  inputs: [JSON_INPUT] as const,
+  options: [
+    { kind: 'text', key: 'rootName', label: 'Root type name', default: 'Root', placeholder: 'Root' },
+    {
+      kind: 'select',
+      key: 'style',
+      label: 'Style',
+      choices: [
+        { value: 'pydantic', label: 'Pydantic v2' },
+        { value: 'dataclass', label: 'dataclass' },
+      ],
+      default: 'pydantic',
+    },
+    { kind: 'boolean', key: 'modernUnions', label: 'str | None', default: true, help: 'Off uses Optional[str]. Python 3.10+.' },
+    { kind: 'boolean', key: 'snakeCaseFields', label: 'snake_case fields', default: true },
+    { kind: 'boolean', key: 'useRichTypes', label: 'datetime, UUID, EmailStr', default: true },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const parsed = parseJson(inputs[0] ?? '');
+    if (!parsed.ok) return parsed;
+
+    const result = emitPython(inferSchema(parsed.value), {
+      rootName: readString(options, 'rootName', 'Root') || 'Root',
+      style: readString(options, 'style', 'pydantic') === 'dataclass' ? 'dataclass' : 'pydantic',
+      modernUnions: readBoolean(options, 'modernUnions', true),
+      useRichTypes: readBoolean(options, 'useRichTypes', true),
+      snakeCaseFields: readBoolean(options, 'snakeCaseFields', true),
+    });
+
+    return ok({
+      content: result.code,
+      language: 'text',
+      filename: 'models.py',
+      stats: [{ label: 'models', value: String(result.typeCount) }],
+      warnings: result.warnings,
+    });
+  },
+});
+
+export const codegenTools = [typescriptTool, zodTool, jsonSchemaTool, goTool, csharpTool, pythonTool];
