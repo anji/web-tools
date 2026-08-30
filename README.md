@@ -9,7 +9,8 @@ The first site is a JSON toolbox with twelve tools.
 ```
 packages/core        the tool contract, worker bridge, WASM loader, registry
 packages/ui          the React shell every tool's UI is rendered from
-packages/tools-json  the twelve JSON tools and the engines behind them
+packages/tools-json  the JSON tools: inference, eight code generators, utilities
+packages/tools-jwt   the JWT tools: decode, security analysis, HS256 verification
 sites/localuse       the deployed site: localuse.dev
 ```
 
@@ -85,13 +86,25 @@ descent, slices, and single-comparison filters including `=~`.
 ## Tests
 
 ```
-pnpm test          # 82 tests
+pnpm test          # 225 tests
 ```
 
-Eight of them run generated TypeScript through the real compiler, because
-substring assertions cannot catch a duplicate identifier or a forward
-reference — the exact class of bug that shipped in the first draft of the
-naming pass.
+Generated code is compiled, not merely asserted on. TypeScript goes through
+`tsc`; Go through `go vet` plus a `gofmt -l` that requires the output already
+be formatted the way gofmt would format it; Python is executed by `python3` as
+both dataclasses and Pydantic models; Java through `javac` in record and POJO
+form; Rust through `cargo check` plus `rustfmt --check`.
+
+That is not ceremony. Substring assertions cannot catch a duplicate identifier,
+a leading underscore Pydantic rejects outright, or `TypeReference<long>` — all
+of which shipped in a first draft and were caught only because a real
+toolchain refused them.
+
+The SHA-256 and HMAC behind the JWT verifier are implemented here rather than
+taken from WebCrypto, which is async-only and would have forced the whole tool
+contract to become asynchronous for one feature. They are checked against
+`node:crypto` over fixed vectors, every length that straddles the 64-byte block
+boundary, and randomised input.
 
 The browser checks live in `sites/localuse/test`. The load-bearing one asserts that a
 full session across every tool makes **zero third-party network requests**. If

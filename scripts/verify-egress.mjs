@@ -52,11 +52,15 @@ for (const url of urls) {
   let functional;
   let how;
   if ((await textarea.count()) > 0) {
+    const IDLE = 'Output appears here as you type';
     await textarea.fill('{"probe":1}', { timeout: 10_000 });
-    await page.waitForTimeout(600);
-    const output = (await page.textContent('pre code').catch(() => '')) ?? '';
-    functional = output.length > 0 && !/^No |^Nothing/.test(output);
-    how = 'tool produced output';
+    await page.waitForTimeout(800);
+    // The probe is deliberately generic, so a JWT tool will reject it. That is
+    // still proof of life: a rendered error means the island hydrated and the
+    // tool ran. Only a page still showing its idle placeholder is dead.
+    const body = (await page.textContent('body').catch(() => '')) ?? '';
+    functional = !body.includes(IDLE);
+    how = 'tool responded to input';
   } else {
     const heading = await page.textContent('h1').catch(() => '');
     const body = (await page.textContent('body').catch(() => '')) ?? '';

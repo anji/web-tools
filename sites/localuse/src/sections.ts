@@ -1,5 +1,6 @@
 import type { Section } from '@tools/core';
 import { jsonTools } from '@tools/json';
+import { jwtTools } from '@tools/jwt';
 
 /**
  * The site is a set of sections. A section with tools is ours; a section
@@ -120,19 +121,11 @@ export const sections: readonly Section[] = [
   {
     slug: 'jwt',
     name: 'JWT & tokens',
-    tagline: 'Decode and inspect tokens and certificates.',
+    tagline: 'Decode tokens, check their claims, and verify signatures locally.',
     description:
-      'Decode JWTs, inspect claims and expiry, and check certificates without pasting them into a server.',
+      'Decode a JWT, inspect its claims and expiry, check it for security problems, and verify an HS256 signature — all in your browser, with neither the token nor the signing secret leaving the tab.',
     intro:
-      'A JWT you are debugging is, by definition, a working credential. Where you paste it is a security decision, not a convenience one.',
-    tools: [],
-    recommendations: [
-      {
-        name: 'jwt.io',
-        href: 'https://jwt.io/',
-        blurb: 'The standard JWT debugger. Decoding happens in the browser.',
-        local: true,
-      },
-    ],
+      'A JWT you are debugging is, by definition, a working credential — and its signing secret is the key to minting more. Where you paste those is a security decision, not a convenience one, which is why all three tools here run as pure functions in your tab on a page the browser forbids from opening a network connection.',
+    tools: jwtTools,
   },
 ];

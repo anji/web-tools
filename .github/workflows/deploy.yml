@@ -117,11 +117,13 @@ jobs:
 
           node sites/${{ matrix.site }}/test/browser.mjs http://127.0.0.1:4330
 
-          # Verify egress on both page shapes: the homepage most people land on,
-          # and a tool page, which is where data actually gets pasted.
+          # Verify egress across page shapes: the homepage most people land on,
+          # a tool page where data gets pasted, and the signature verifier,
+          # which asks for a signing secret and so has the most to lose.
           node scripts/verify-egress.mjs \
             http://127.0.0.1:4330/ \
-            http://127.0.0.1:4330/json/json-to-typescript/
+            http://127.0.0.1:4330/json/json-to-typescript/ \
+            http://127.0.0.1:4330/jwt/jwt-signature-verifier/
 
       # Validates wrangler.jsonc and the asset directory without credentials,
       # so a config mistake fails here rather than half way through a deploy.

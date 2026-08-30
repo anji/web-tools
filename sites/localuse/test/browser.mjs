@@ -131,6 +131,49 @@ await check('tool page carries canonical, description and FAQ JSON-LD', async ()
   if (!ld.some((s) => s.includes('BreadcrumbList'))) throw new Error('no breadcrumbs');
 });
 
+// --- JWT: the section where the privacy claim is doing the most work
+{
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  const { createHmac } = await import('node:crypto');
+  const signingInput = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: '123', name: 'Ada', iss: 'auth.test' })}`;
+  const token = `${signingInput}.${createHmac('sha256', 'correct-horse').update(signingInput).digest('base64url')}`;
+  const unsigned = `${b64({ alg: 'none' })}.${b64({ sub: 'admin', password: 'hunter2' })}.`;
+
+  await page.goto(`${BASE}/jwt/jwt-decoder/`, { waitUntil: 'networkidle' });
+  await check('jwt decoder reads the payload', async () => {
+    await type('textarea', token);
+    const out = await output();
+    if (!out.includes('"name": "Ada"')) throw new Error('payload not decoded: ' + out.slice(0, 200));
+  });
+
+  await page.goto(`${BASE}/jwt/jwt-security-check/`, { waitUntil: 'networkidle' });
+  await check('jwt security check flags alg:none without echoing the secret', async () => {
+    await type('textarea', unsigned);
+    const out = await output();
+    if (!/CRITICAL/.test(out)) throw new Error('alg:none not flagged: ' + out.slice(0, 200));
+    if (!/password/.test(out)) throw new Error('readable sensitive claim not flagged');
+    if (out.includes('hunter2')) throw new Error('the finding echoed the secret value');
+  });
+
+  await page.goto(`${BASE}/jwt/jwt-signature-verifier/`, { waitUntil: 'networkidle' });
+  await check('jwt signature verifies in-browser against the real secret', async () => {
+    await type('textarea', token);
+    await page.locator('input[type="text"]').first().fill('correct-horse');
+    await page.waitForTimeout(600);
+    if (!/Signature is valid/.test(await output())) throw new Error('valid signature not accepted');
+    await page.locator('input[type="text"]').first().fill('wrong-secret');
+    await page.waitForTimeout(600);
+    if (!/does not match/.test(await output())) throw new Error('wrong secret not rejected');
+  });
+
+  await check('a section that gained tools is no longer a placeholder', async () => {
+    await page.goto(`${BASE}/jwt/`, { waitUntil: 'networkidle' });
+    const body = await page.textContent('body');
+    if (/have not built this section yet/i.test(body)) throw new Error('still showing placeholder');
+    if (!body.includes('JWT decoder')) throw new Error('tools not listed');
+  });
+}
+
 // --- Hub navigation and the curated placeholder sections
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
 await check('homepage lists the live section and links into it', async () => {
