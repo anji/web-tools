@@ -14,6 +14,8 @@ export * from './emit-json-schema.js';
 export * from './emit-go.js';
 export * from './emit-csharp.js';
 export * from './emit-python.js';
+export * from './emit-java.js';
+export * from './emit-rust.js';
 
 import { formatTools } from './tools-format.js';
 import { codegenTools } from './tools-codegen.js';

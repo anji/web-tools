@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,6 +8,8 @@ import { inferSchema } from '../src/schema.js';
 import { emitGo, defaultGoOptions } from '../src/emit-go.js';
 import { emitCSharp, defaultCSharpOptions } from '../src/emit-csharp.js';
 import { emitPython, defaultPythonOptions } from '../src/emit-python.js';
+import { emitJava, defaultJavaOptions } from '../src/emit-java.js';
+import { emitRust, defaultRustOptions } from '../src/emit-rust.js';
 
 const go = (v: unknown, o: Partial<typeof defaultGoOptions> = {}) =>
   emitGo(inferSchema(v), { ...defaultGoOptions, ...o }).code;
@@ -15,6 +17,10 @@ const cs = (v: unknown, o: Partial<typeof defaultCSharpOptions> = {}) =>
   emitCSharp(inferSchema(v), { ...defaultCSharpOptions, ...o }).code;
 const py = (v: unknown, o: Partial<typeof defaultPythonOptions> = {}) =>
   emitPython(inferSchema(v), { ...defaultPythonOptions, ...o }).code;
+const java = (v: unknown, o: Partial<typeof defaultJavaOptions> = {}) =>
+  emitJava(inferSchema(v), { ...defaultJavaOptions, ...o }).code;
+const rs = (v: unknown, o: Partial<typeof defaultRustOptions> = {}) =>
+  emitRust(inferSchema(v), { ...defaultRustOptions, ...o }).code;
 
 /** Sample shapes every language emitter is held to. */
 const SAMPLES: Array<[string, unknown]> = [
@@ -174,6 +180,104 @@ describe('Python', () => {
   });
 });
 
+
+describe('Java', () => {
+  it('boxes primitives that can be absent or null', () => {
+    // A Java `long` cannot hold null, so an optional number must become Long.
+    const code = java([{ always: 1, sometimes: 2 }, { always: 3 }]);
+    expect(code).toMatch(/long always/);
+    expect(code).toMatch(/Long sometimes/);
+  });
+
+  it('leaves reference types unboxed', () => {
+    const code = java([{ s: 'x' }, { s: null }]);
+    expect(code).toContain('String s');
+  });
+
+  it('warns when boxing is disabled', () => {
+    const result = emitJava(inferSchema([{ a: 1 }, {}]), {
+      ...defaultJavaOptions,
+      useBoxedTypes: false,
+    });
+    expect(result.warnings.join(' ')).toMatch(/cannot represent absence/i);
+  });
+
+  it('names a boxed type in the root hint, since generics reject primitives', () => {
+    expect(java(42)).toContain('TypeReference<Long>');
+    expect(java(42)).not.toContain('TypeReference<long>');
+  });
+
+  it('presents each type as its own file, since Java allows one public type per file', () => {
+    const code = java({ team: { name: 'Core' } });
+    expect(code).toContain('// Team.java');
+    expect(code).toContain('// Root.java');
+  });
+
+  it('scopes imports to the file that needs them', () => {
+    const code = java({ tags: ['a'], team: { name: 'x' } });
+    const teamFile = code.split('// Root.java')[0]!;
+    expect(teamFile).not.toContain('java.util.List');
+  });
+
+  it('generates getters and setters in class mode', () => {
+    const code = java({ userName: 'a', active: true }, { style: 'class' });
+    expect(code).toContain('private String userName;');
+    expect(code).toContain('public String getUserName()');
+    expect(code).toContain('public void setUserName(String userName)');
+    expect(code).toContain('public boolean isActive()');
+  });
+
+  it('renames fields that collide with Java keywords', () => {
+    expect(java({ class: 'x', static: 1 })).toContain('classValue');
+  });
+});
+
+describe('Rust', () => {
+  it('wraps optional and nullable fields in Option', () => {
+    const code = rs([{ a: 1, b: 'x' }, { a: 2, b: null }, { a: 3 }]);
+    expect(code).toContain('pub a: i64,');
+    expect(code).toContain('pub b: Option<String>,');
+  });
+
+  it('renames non-snake_case keys rather than emitting invalid identifiers', () => {
+    const code = rs({ userName: 'a' });
+    expect(code).toContain('#[serde(rename = "userName")]');
+    expect(code).toContain('pub user_name: String,');
+  });
+
+  it('uses raw identifiers for keywords', () => {
+    const code = rs({ type: 'x', match: 1 });
+    expect(code).toContain('pub r#type: String,');
+    expect(code).toContain('pub r#match: i64,');
+    // A raw identifier is still the same name, so no rename is needed.
+    expect(code).not.toContain('rename = "type"');
+  });
+
+  it('suffixes the keywords raw identifiers cannot express', () => {
+    const code = rs({ self: 1, crate: 2 });
+    expect(code).toContain('self_');
+    expect(code).toContain('crate_');
+    expect(code).toContain('rename = "self"');
+  });
+
+  it('skips serialising None so absent stays absent on the way out', () => {
+    expect(rs([{ a: 1 }, {}])).toContain('skip_serializing_if = "Option::is_none"');
+  });
+
+  it('warns when Value appears', () => {
+    const result = emitRust(inferSchema({ mixed: [1, 'two'] }), defaultRustOptions);
+    expect(result.warnings.join(' ')).toMatch(/serde_json::Value/);
+  });
+
+  it('warns that disabling Option makes deserialisation fail outright', () => {
+    const result = emitRust(inferSchema([{ a: 1 }, {}]), {
+      ...defaultRustOptions,
+      useOption: false,
+    });
+    expect(result.warnings.join(' ')).toMatch(/no null/i);
+  });
+});
+
 // --- The real proof: hand the output to the actual toolchains ----------------
 
 function run(cmd: string, args: string[], cwd?: string): { ok: boolean; out: string } {
@@ -238,4 +342,71 @@ describe.runIf(hasPython)('generated Python imports cleanly', () => {
       });
     }
   });
+});
+
+const hasJava = run('javac', ['-version']).ok;
+
+describe.runIf(hasJava)('generated Java compiles', () => {
+  // Jackson is not available offline, so the annotation is stubbed. That is
+  // enough to prove the generated types and annotation targets are valid.
+  const STUB = `package com.fasterxml.jackson.annotation;
+import java.lang.annotation.*;
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.METHOD, ElementType.RECORD_COMPONENT})
+public @interface JsonProperty { String value() default ""; }
+`;
+
+  for (const [name, sample] of SAMPLES) {
+    for (const style of ['record', 'class'] as const) {
+      it(`${name} (${style})`, () => {
+        const dir = mkdtempSync(join(tmpdir(), 'gen-java-'));
+        try {
+          mkdirSync(join(dir, 'com/fasterxml/jackson/annotation'), { recursive: true });
+          writeFileSync(join(dir, 'com/fasterxml/jackson/annotation/JsonProperty.java'), STUB);
+
+          // Each "// X.java" block is a separate compilation unit.
+          const code = java(sample, { style });
+          const files: string[] = [];
+          for (const block of code.split(/^\/\/ (?=\w+\.java$)/m)) {
+            const match = /^(\w+)\.java\n([\s\S]*)$/.exec(block.trim());
+            if (!match) continue;
+            const file = `${match[1]}.java`;
+            writeFileSync(join(dir, file), match[2]!);
+            files.push(file);
+          }
+          if (files.length === 0) {
+            // A scalar root produces no Java type at all, only a hint about
+            // what to deserialise into. There is nothing to compile, but the
+            // hint must still name a type generics can actually hold.
+            expect(code).toMatch(/^\/\/ Deserialise as: [A-Z]/m);
+            return;
+          }
+
+          const result = run('javac', ['-nowarn', '-cp', '.', ...files], dir);
+          expect(result.ok, `${result.out}\n--- generated ---\n${code}`).toBe(true);
+        } finally {
+          rmSync(dir, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+});
+
+// A prepared crate with serde is required; skipped when it is absent so the
+// suite still runs on a machine without one.
+const RUST_CRATE = process.env.RUST_CHECK_CRATE ?? '/tmp/rustcheck';
+const hasRustCrate = run('cargo', ['--version']).ok && existsSync(join(RUST_CRATE, 'Cargo.toml'));
+
+describe.runIf(hasRustCrate)('generated Rust compiles and is rustfmt-clean', () => {
+  for (const [name, sample] of SAMPLES) {
+    it(name, () => {
+      const lib = join(RUST_CRATE, 'src', 'lib.rs');
+      writeFileSync(lib, rs(sample, { useRichTypes: true }));
+      const check = run('cargo', ['check', '--quiet'], RUST_CRATE);
+      expect(check.ok, check.out).toBe(true);
+      // As with gofmt, matching rustfmt means nobody reformats what they paste.
+      const fmt = run('rustfmt', ['--check', '--edition', '2021', lib]);
+      expect(fmt.out.trim(), `not rustfmt-formatted:\n${fmt.out}`).toBe('');
+    });
+  }
 });

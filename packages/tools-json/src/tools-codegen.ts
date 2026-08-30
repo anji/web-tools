@@ -15,6 +15,8 @@ import { emitJsonSchema } from './emit-json-schema.js';
 import { emitGo } from './emit-go.js';
 import { emitCSharp } from './emit-csharp.js';
 import { emitPython } from './emit-python.js';
+import { emitJava } from './emit-java.js';
+import { emitRust } from './emit-rust.js';
 
 const JSON_INPUT = {
   label: 'JSON',
@@ -523,4 +525,168 @@ const pythonTool = defineTool({
   },
 });
 
-export const codegenTools = [typescriptTool, zodTool, jsonSchemaTool, goTool, csharpTool, pythonTool];
+const javaTool = defineTool({
+  id: 'to-java',
+  slug: 'json-to-java',
+  label: 'JSON → Java',
+  blurb: 'Generate Java records or POJOs with Jackson annotations and correctly boxed types.',
+  category: 'Code generation',
+  seo: {
+    title: 'JSON to Java POJO and Record Generator - No Upload',
+    description:
+      'Convert JSON to Java records or POJOs in your browser. Merges every array element so optional fields are boxed rather than primitive, adds Jackson annotations, and maps timestamps and UUIDs to Instant and UUID.',
+    heading: 'JSON to Java',
+    intro:
+      'Paste a JSON response and get Java records or classic POJOs with getters and setters. Fields the payload can omit or send as null come back boxed, because a Java primitive has no way to represent absence.',
+    keywords: [
+      'json to java',
+      'json to pojo',
+      'json to java class',
+      'json to java record',
+      'generate java class from json',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      SAMPLES_FAQ,
+      CORRECTNESS_FAQ,
+      {
+        question: 'Why is one field long and another Long?',
+        answer:
+          'A primitive long cannot be null. If the API omits a field or sends null, a long silently stays 0 and your code cannot tell that apart from a zero the server really sent - so any field the sample showed as absent or null is boxed. Fields present in every record stay primitive, which is faster and clearer about intent.',
+      },
+      {
+        question: 'Records or POJOs?',
+        answer:
+          'Records if you are on Java 16 or later and the data is immutable, which is usually true of a decoded response - they are a fraction of the code. POJOs if a framework requires a no-arg constructor and setters, which some older Jackson and JPA setups still do.',
+      },
+      {
+        question: 'Why is each class shown as a separate file?',
+        answer:
+          'Java allows only one public top-level type per file, so concatenating them would not compile. Each block is headed with the filename it belongs in.',
+      },
+    ],
+  },
+  inputs: [JSON_INPUT] as const,
+  options: [
+    { kind: 'text', key: 'rootName', label: 'Root type name', default: 'Root', placeholder: 'Root' },
+    { kind: 'text', key: 'packageName', label: 'Package', default: '', placeholder: 'com.example.models' },
+    {
+      kind: 'select',
+      key: 'style',
+      label: 'Style',
+      choices: [
+        { value: 'record', label: 'record (Java 16+)' },
+        { value: 'class', label: 'POJO with getters' },
+      ],
+      default: 'record',
+    },
+    { kind: 'boolean', key: 'jackson', label: 'Jackson annotations', default: true },
+    { kind: 'boolean', key: 'useBoxedTypes', label: 'Box nullable primitives', default: true, help: 'A primitive cannot hold null.' },
+    { kind: 'boolean', key: 'useRichTypes', label: 'Instant and UUID', default: true },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const parsed = parseJson(inputs[0] ?? '');
+    if (!parsed.ok) return parsed;
+
+    const result = emitJava(inferSchema(parsed.value), {
+      rootName: readString(options, 'rootName', 'Root') || 'Root',
+      packageName: readString(options, 'packageName', ''),
+      style: readString(options, 'style', 'record') === 'class' ? 'class' : 'record',
+      jackson: readBoolean(options, 'jackson', true),
+      useBoxedTypes: readBoolean(options, 'useBoxedTypes', true),
+      useRichTypes: readBoolean(options, 'useRichTypes', true),
+    });
+
+    return ok({
+      content: result.code,
+      language: 'text',
+      filename: 'Models.java',
+      stats: [{ label: 'types', value: String(result.typeCount) }],
+      warnings: result.warnings,
+    });
+  },
+});
+
+const rustTool = defineTool({
+  id: 'to-rust',
+  slug: 'json-to-rust',
+  label: 'JSON → Rust',
+  blurb: 'Generate serde structs with Option, rename attributes and rustfmt spacing.',
+  category: 'Code generation',
+  seo: {
+    title: 'JSON to Rust Serde Struct Generator - Runs In Your Browser',
+    description:
+      'Convert JSON to Rust structs with serde derives. Merges every array element so optional fields become Option<T>, renames keys to snake_case with serde rename, and emits rustfmt-clean output. No upload.',
+    heading: 'JSON to Rust',
+    intro:
+      'Paste a JSON response and get serde-ready Rust structs. Fields the payload can omit or send as null become Option<T> - in Rust that is not a style choice, it is the difference between deserialising and erroring out.',
+    keywords: [
+      'json to rust',
+      'json to serde struct',
+      'rust struct generator',
+      'json to rust struct',
+      'generate serde types from json',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      SAMPLES_FAQ,
+      CORRECTNESS_FAQ,
+      {
+        question: 'Why does it matter more in Rust?',
+        answer:
+          'Rust has no null. A String field cannot hold one, so if the payload sends null serde fails the entire deserialisation with a type error rather than filling in a default. A converter that guesses from one record produces types that simply do not parse the second record.',
+      },
+      {
+        question: 'What is r#type?',
+        answer:
+          'A raw identifier. Some JSON keys - type, match, use - are Rust keywords, and the r# prefix lets them be used as field names without renaming. A handful of keywords cannot be expressed that way, and those get a suffix plus a serde rename instead.',
+      },
+      {
+        question: 'Do I need to run rustfmt on this?',
+        answer:
+          'No. The output is checked against the real rustfmt binary in this project\u2019s tests, so it is already formatted the way your project would format it.',
+      },
+    ],
+  },
+  inputs: [JSON_INPUT] as const,
+  options: [
+    { kind: 'text', key: 'rootName', label: 'Root type name', default: 'Root', placeholder: 'Root' },
+    { kind: 'text', key: 'derives', label: 'Extra derives', default: 'Debug, Clone', placeholder: 'Debug, Clone' },
+    { kind: 'boolean', key: 'useOption', label: 'Option for optional', default: true, help: 'Rust has no null.' },
+    { kind: 'boolean', key: 'skipSerializingNone', label: 'skip_serializing_if on None', default: true },
+    { kind: 'boolean', key: 'useRichTypes', label: 'chrono and uuid types', default: false, help: 'Needs those crates.' },
+    { kind: 'boolean', key: 'publicItems', label: 'pub structs and fields', default: true },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const parsed = parseJson(inputs[0] ?? '');
+    if (!parsed.ok) return parsed;
+
+    const result = emitRust(inferSchema(parsed.value), {
+      rootName: readString(options, 'rootName', 'Root') || 'Root',
+      derives: readString(options, 'derives', 'Debug, Clone'),
+      useOption: readBoolean(options, 'useOption', true),
+      skipSerializingNone: readBoolean(options, 'skipSerializingNone', true),
+      useRichTypes: readBoolean(options, 'useRichTypes', false),
+      publicItems: readBoolean(options, 'publicItems', true),
+    });
+
+    return ok({
+      content: result.code,
+      language: 'text',
+      filename: 'models.rs',
+      stats: [{ label: 'structs', value: String(result.typeCount) }],
+      warnings: result.warnings,
+    });
+  },
+});
+
+export const codegenTools = [
+  typescriptTool,
+  zodTool,
+  jsonSchemaTool,
+  goTool,
+  csharpTool,
+  pythonTool,
+  javaTool,
+  rustTool,
+];
