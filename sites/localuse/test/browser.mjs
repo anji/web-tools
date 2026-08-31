@@ -131,6 +131,42 @@ await check('tool page carries canonical, description and FAQ JSON-LD', async ()
   if (!ld.some((s) => s.includes('BreadcrumbList'))) throw new Error('no breadcrumbs');
 });
 
+// --- LLM tooling: deterministic tools for people building with models
+{
+  await page.goto(`${BASE}/llm/tool-definition-generator/`, { waitUntil: 'networkidle' });
+  await check('tool definition generator inlines nested shapes', async () => {
+    await type('textarea', '{"query":"revenue","filter":{"since":"2026-01-01"}}');
+    const out = await output();
+    const definition = JSON.parse(out);
+    if (!definition.input_schema?.properties?.filter?.properties?.since) {
+      throw new Error('nested shape not inlined: ' + out.slice(0, 300));
+    }
+    if (out.includes('$ref') || out.includes('$defs')) throw new Error('used $ref, which providers vary on');
+  });
+
+  await page.goto(`${BASE}/llm/tool-definition-linter/`, { waitUntil: 'networkidle' });
+  await check('linter catches a custom tool shadowing a built-in name', async () => {
+    await type('textarea', JSON.stringify({
+      name: 'bash',
+      description: 'A custom tool that happens to be called bash and runs things.',
+      input_schema: { type: 'object', properties: { cmd: { type: 'string' } } },
+    }));
+    const out = await output();
+    if (!/Anthropic-defined/.test(out)) throw new Error('shadowed built-in not flagged: ' + out.slice(0, 300));
+  });
+
+  await page.goto(`${BASE}/llm/streaming-response-inspector/`, { waitUntil: 'networkidle' });
+  await check('stream inspector reassembles tool arguments and spots a cut-off call', async () => {
+    const frame = (name, data) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`;
+    await type('textarea',
+      frame('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: 'tu_1', name: 'get_weather' } }) +
+      frame('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"ci' } }));
+    const out = await output();
+    if (!/cut off mid-stream/.test(out)) throw new Error('incomplete arguments not flagged: ' + out.slice(0, 300));
+    if (!/TRUNCATED/.test(out)) throw new Error('missing message_stop not reported');
+  });
+}
+
 // --- Hash and time: exactness is the reason these exist
 {
   const { createHash } = await import('node:crypto');

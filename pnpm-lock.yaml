@@ -62,6 +62,15 @@ importers:
         specifier: workspace:*
         version: link:../hash
 
+  packages/tools-llm:
+    dependencies:
+      '@tools/codegen':
+        specifier: workspace:*
+        version: link:../codegen
+      '@tools/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/tools-lockfile:
     dependencies:
       '@tools/core':
@@ -119,6 +128,9 @@ importers:
       '@tools/jwt':
         specifier: workspace:*
         version: link:../../packages/tools-jwt
+      '@tools/llm':
+        specifier: workspace:*
+        version: link:../../packages/tools-llm
       '@tools/lockfile':
         specifier: workspace:*
         version: link:../../packages/tools-lockfile

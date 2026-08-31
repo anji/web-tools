@@ -5,6 +5,7 @@ import { csvTools } from '@tools/csv';
 import { lockfileTools } from '@tools/lockfile';
 import { timeTools } from '@tools/time';
 import { hashTools } from '@tools/hash';
+import { llmTools } from '@tools/llm';
 
 /**
  * The site is a set of sections. A section with tools is ours; a section
@@ -45,6 +46,16 @@ export const sections: readonly Section[] = [
     intro:
       'A lockfile is a map of everything your build trusts, and a private one names your internal registry — which is why these run in your tab rather than on someone else’s server. It is also thousands of lines nobody reads, which is how a change that matters gets merged unnoticed.',
     tools: lockfileTools,
+  },
+  {
+    slug: 'llm',
+    name: 'LLM & agents',
+    tagline: 'Build and debug tool definitions and streamed responses.',
+    description:
+      'Generate an Anthropic tool definition from sample arguments, lint one against the constraints the API enforces, and reconstruct a message from a captured SSE stream. Nothing uploaded.',
+    intro:
+      'Deterministic tools for people building with models, rather than tools that call one. The things you would paste into a hosted helper here — a system prompt, a captured response, a tool schema naming your internal endpoints — are exactly the things that should not leave your machine, and none of this needs a model to be exact.',
+    tools: llmTools,
   },
   {
     slug: 'time',

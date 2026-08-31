@@ -24,7 +24,8 @@
     "@tools/csv": "workspace:*",
     "@tools/lockfile": "workspace:*",
     "@tools/time": "workspace:*",
-    "@tools/hash": "workspace:*"
+    "@tools/hash": "workspace:*",
+    "@tools/llm": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
