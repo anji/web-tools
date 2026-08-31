@@ -2,6 +2,7 @@ import type { Section } from '@tools/core';
 import { jsonTools } from '@tools/json';
 import { jwtTools } from '@tools/jwt';
 import { csvTools } from '@tools/csv';
+import { lockfileTools } from '@tools/lockfile';
 
 /**
  * The site is a set of sections. A section with tools is ours; a section
@@ -32,6 +33,16 @@ export const sections: readonly Section[] = [
     intro:
       'The files people most need to convert are the ones they least want to upload — an export of your customer table is not something to hand to a free web converter. Everything here parses in your tab, including the awkward parts: quoted delimiters, newlines inside fields, BOMs, semicolon exports and rows with the wrong field count.',
     tools: csvTools,
+  },
+  {
+    slug: 'dependencies',
+    name: 'Dependencies',
+    tagline: 'Read a lockfile diff the way a reviewer needs to.',
+    description:
+      'Compare two lockfiles and see what actually changed: packages added, removed and upgraded by semver impact, plus integrity and registry changes worth questioning. npm, pnpm and yarn.',
+    intro:
+      'A lockfile is a map of everything your build trusts, and a private one names your internal registry — which is why these run in your tab rather than on someone else’s server. It is also thousands of lines nobody reads, which is how a change that matters gets merged unnoticed.',
+    tools: lockfileTools,
   },
   {
     slug: 'regex',

@@ -53,6 +53,15 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/tools-lockfile:
+    dependencies:
+      '@tools/core':
+        specifier: workspace:*
+        version: link:../core
+      yaml:
+        specifier: ^2.6.1
+        version: 2.9.0
+
   packages/ui:
     dependencies:
       '@tools/core':
@@ -92,6 +101,9 @@ importers:
       '@tools/jwt':
         specifier: workspace:*
         version: link:../../packages/tools-jwt
+      '@tools/lockfile':
+        specifier: workspace:*
+        version: link:../../packages/tools-lockfile
       '@tools/ui':
         specifier: workspace:*
         version: link:../../packages/ui

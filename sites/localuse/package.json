@@ -21,7 +21,8 @@
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0",
     "@tools/jwt": "workspace:*",
-    "@tools/csv": "workspace:*"
+    "@tools/csv": "workspace:*",
+    "@tools/lockfile": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

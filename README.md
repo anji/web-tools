@@ -13,6 +13,7 @@ packages/codegen     schema inference and the eight language emitters
 packages/tools-json  the JSON tools
 packages/tools-jwt   the JWT tools: decode, security analysis, HS256 verification
 packages/tools-csv   the CSV tools: parser, column inference, SQL, profiling
+packages/tools-lockfile  lockfile parsing for npm, pnpm and yarn, plus the diff
 sites/localuse       the deployed site: localuse.dev
 ```
 
@@ -98,7 +99,7 @@ descent, slices, and single-comparison filters including `=~`.
 ## Tests
 
 ```
-pnpm test          # 274 tests
+pnpm test          # 320 tests
 ```
 
 Generated code is compiled, not merely asserted on. TypeScript goes through

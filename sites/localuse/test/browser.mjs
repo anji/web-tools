@@ -131,6 +131,37 @@ await check('tool page carries canonical, description and FAQ JSON-LD', async ()
   if (!ld.some((s) => s.includes('BreadcrumbList'))) throw new Error('no breadcrumbs');
 });
 
+// --- Lockfile diff: the supply-chain signal is the whole point
+{
+  const mk = (pkgs) => JSON.stringify({
+    name: 'app', lockfileVersion: 3,
+    packages: {
+      '': { name: 'app' },
+      ...Object.fromEntries(Object.entries(pkgs).map(([n, v]) => [`node_modules/${n}`, v])),
+    },
+  });
+  const before = mk({
+    react: { version: '17.0.2' },
+    lodash: { version: '4.17.21', integrity: 'sha512-ORIG' },
+  });
+  const after = mk({
+    react: { version: '18.2.0' },
+    lodash: { version: '4.17.21', integrity: 'sha512-TAMPERED' },
+  });
+
+  await page.goto(`${BASE}/dependencies/lockfile-diff/`, { waitUntil: 'networkidle' });
+  await check('lockfile diff flags a changed integrity on an unchanged version', async () => {
+    await page.locator('textarea').nth(0).fill(before);
+    await page.locator('textarea').nth(1).fill(after);
+    await page.waitForTimeout(700);
+    const out = await output();
+    if (!/SECURITY \(1\)/.test(out)) throw new Error('integrity change not flagged: ' + out.slice(0, 300));
+    if (!/MAJOR \(1\)/.test(out)) throw new Error('react major bump not grouped');
+    // The version did not change, so it must not appear as a version change.
+    if (/lodash\s+4\.17\.21 →/.test(out)) throw new Error('reported an unchanged version as changed');
+  });
+}
+
 // --- JWT: the section where the privacy claim is doing the most work
 {
   const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
