@@ -8,15 +8,15 @@ import {
 } from '@tools/core';
 
 import { parseJson } from './parse.js';
-import { inferSchema } from './schema.js';
-import { emitTypeScript } from './emit-typescript.js';
-import { emitZod } from './emit-zod.js';
-import { emitJsonSchema } from './emit-json-schema.js';
-import { emitGo } from './emit-go.js';
-import { emitCSharp } from './emit-csharp.js';
-import { emitPython } from './emit-python.js';
-import { emitJava } from './emit-java.js';
-import { emitRust } from './emit-rust.js';
+import { inferSchema } from '@tools/codegen';
+import { emitTypeScript } from '@tools/codegen';
+import { emitZod } from '@tools/codegen';
+import { emitJsonSchema } from '@tools/codegen';
+import { emitGo } from '@tools/codegen';
+import { emitCSharp } from '@tools/codegen';
+import { emitPython } from '@tools/codegen';
+import { emitJava } from '@tools/codegen';
+import { emitRust } from '@tools/codegen';
 
 const JSON_INPUT = {
   label: 'JSON',

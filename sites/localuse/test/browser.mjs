@@ -207,10 +207,34 @@ await check('planned section honestly flags a non-local recommendation', async (
   if (!body.includes('sends to a server')) throw new Error('non-local tool not flagged');
 });
 
-await check('a section with no recommendations still says something useful', async () => {
-  await page.goto(`${BASE}/csv/`, { waitUntil: 'networkidle' });
-  const body = await page.textContent('body');
-  if (!/next on the list/i.test(body)) throw new Error('empty section has no copy');
+await check('every section page is either live or an honest placeholder', async () => {
+  // Driven off the sitemap so it keeps working as sections flip from
+  // placeholder to live, rather than naming slugs that go stale.
+  // Read it out-of-band rather than navigating: an XML document carries no
+  // <link rel="icon">, so the browser falls back to /favicon.ico and logs a 404
+  // that has nothing to do with the site.
+  const xml = await (await page.request.get(`${BASE}/sitemap.xml`)).text();
+  // Only single-segment paths are sections; two segments is a tool page.
+  const slugs = [...xml.matchAll(/<loc>https?:\/\/[^/]+\/([a-z-]+)\/<\/loc>/g)]
+    .map((m) => m[1])
+    .filter((s, i, all) => all.indexOf(s) === i);
+  if (slugs.length < 5) throw new Error(`only found ${slugs.length} sections in the sitemap`);
+
+  for (const slug of slugs) {
+    await page.goto(`${BASE}/${slug}/`, { waitUntil: 'networkidle' });
+    const body = await page.textContent('body');
+    const isPlaceholder = /have not built this section yet/i.test(body);
+    if (isPlaceholder) {
+      // A placeholder must point somewhere or explain why it cannot.
+      const hasAlternative = /runs locally|sends to a server|self-hosted/.test(body);
+      const explainsGap = /next on the list/i.test(body);
+      if (!hasAlternative && !explainsGap) {
+        throw new Error(`/${slug}/ is a placeholder that offers nothing`);
+      }
+    } else if (!/tools$/m.test(body) && !body.includes('tools')) {
+      throw new Error(`/${slug}/ is neither live nor a placeholder`);
+    }
+  }
 });
 
 await check('no third-party network requests from any page', async () => {

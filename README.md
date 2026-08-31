@@ -9,8 +9,10 @@ The first site is a JSON toolbox with twelve tools.
 ```
 packages/core        the tool contract, worker bridge, WASM loader, registry
 packages/ui          the React shell every tool's UI is rendered from
-packages/tools-json  the JSON tools: inference, eight code generators, utilities
+packages/codegen     schema inference and the eight language emitters
+packages/tools-json  the JSON tools
 packages/tools-jwt   the JWT tools: decode, security analysis, HS256 verification
+packages/tools-csv   the CSV tools: parser, column inference, SQL, profiling
 sites/localuse       the deployed site: localuse.dev
 ```
 
@@ -56,6 +58,16 @@ interactive UI. Adding a tool means writing its `run` function and its copy.
 a promise: it takes strings and returns a `Result`, has no DOM and no network,
 and is therefore also trivially testable in node and runnable in a worker.
 
+## Why codegen is its own package
+
+Inference works on *values*, not on JSON. A parsed CSV column produces values
+exactly as a JSON document does, so the eight emitters serve both formats
+without knowing which one they are looking at. `packages/codegen` was extracted
+the moment a second format needed it, which is what makes "CSV to Go struct" a
+parser away rather than a rewrite — and why a nullable CSV column arrives as
+`*string` in Go, `Option<String>` in Rust and `str | None` in Python with no
+CSV-specific code anywhere.
+
 ## The JSON engine
 
 Twelve tools, but one inference pass. TypeScript, Zod and JSON Schema are three
@@ -86,7 +98,7 @@ descent, slices, and single-comparison filters including `=~`.
 ## Tests
 
 ```
-pnpm test          # 225 tests
+pnpm test          # 274 tests
 ```
 
 Generated code is compiled, not merely asserted on. TypeScript goes through

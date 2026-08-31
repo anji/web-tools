@@ -1,6 +1,7 @@
 import type { Section } from '@tools/core';
 import { jsonTools } from '@tools/json';
 import { jwtTools } from '@tools/jwt';
+import { csvTools } from '@tools/csv';
 
 /**
  * The site is a set of sections. A section with tools is ours; a section
@@ -25,13 +26,12 @@ export const sections: readonly Section[] = [
   {
     slug: 'csv',
     name: 'CSV & spreadsheets',
-    tagline: 'Convert, clean and inspect tabular data.',
+    tagline: 'Convert to JSON, SQL or typed structs, and profile what is in the file.',
     description:
-      'Browser-based CSV tools: convert to JSON and SQL, deduplicate, detect column types, compare files and anonymise columns. In development.',
+      'Browser-based CSV tools: convert to JSON with real types, generate SQL schemas and inserts, produce typed structs for eight languages, and profile columns for nulls, ranges and malformed rows.',
     intro:
-      'This is the section we are building next, for the same reason JSON came first: the files people most need to convert are the ones they least want to upload. An export of your customer table is not something to hand to a free web converter.',
-    tools: [],
-    recommendations: [],
+      'The files people most need to convert are the ones they least want to upload — an export of your customer table is not something to hand to a free web converter. Everything here parses in your tab, including the awkward parts: quoted delimiters, newlines inside fields, BOMs, semicolon exports and rows with the wrong field count.',
+    tools: csvTools,
   },
   {
     slug: 'regex',

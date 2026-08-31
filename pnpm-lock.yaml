@@ -18,10 +18,28 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(lightningcss@1.32.0)
 
+  packages/codegen:
+    dependencies:
+      '@tools/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/core: {}
+
+  packages/tools-csv:
+    dependencies:
+      '@tools/codegen':
+        specifier: workspace:*
+        version: link:../codegen
+      '@tools/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/tools-json:
     dependencies:
+      '@tools/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@tools/core':
         specifier: workspace:*
         version: link:../core
@@ -65,6 +83,9 @@ importers:
       '@tools/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@tools/csv':
+        specifier: workspace:*
+        version: link:../../packages/tools-csv
       '@tools/json':
         specifier: workspace:*
         version: link:../../packages/tools-json
