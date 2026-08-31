@@ -1,12 +1,12 @@
 /**
- * SHA-256 and HMAC, implemented synchronously.
+ * SHA-256, implemented synchronously.
  *
  * WebCrypto is async-only, and a tool's run() is a synchronous pure function -
  * which is the property that lets it run in a worker and be tested in node.
- * Rather than make the whole contract async for one tool, the primitive is
- * implemented here. It is checked against node:crypto in the tests, over both
- * fixed vectors and randomised input, because a hash that is subtly wrong is
- * worse than no hash at all.
+ * Rather than make the whole contract async, the primitives are implemented
+ * here. Every one is checked against node:crypto over fixed vectors, every
+ * length that straddles the block boundary, and randomised input, because a
+ * hash that is subtly wrong is worse than no hash at all.
  */
 
 const K = new Uint32Array([
@@ -85,27 +85,6 @@ export function sha256(message: Uint8Array): Uint8Array {
   const outView = new DataView(out.buffer);
   for (let i = 0; i < 8; i++) outView.setUint32(i * 4, h[i]!, false);
   return out;
-}
-
-const BLOCK_SIZE = 64;
-
-export function hmacSha256(key: Uint8Array, message: Uint8Array): Uint8Array {
-  // A key longer than the block size is hashed first; a shorter one is padded.
-  let normalised = key;
-  if (normalised.length > BLOCK_SIZE) normalised = sha256(normalised);
-
-  const padded = new Uint8Array(BLOCK_SIZE);
-  padded.set(normalised);
-
-  const inner = new Uint8Array(BLOCK_SIZE + message.length);
-  const outer = new Uint8Array(BLOCK_SIZE + 32);
-  for (let i = 0; i < BLOCK_SIZE; i++) {
-    inner[i] = padded[i]! ^ 0x36;
-    outer[i] = padded[i]! ^ 0x5c;
-  }
-  inner.set(message, BLOCK_SIZE);
-  outer.set(sha256(inner), BLOCK_SIZE);
-  return sha256(outer);
 }
 
 /**

@@ -3,6 +3,8 @@ import { jsonTools } from '@tools/json';
 import { jwtTools } from '@tools/jwt';
 import { csvTools } from '@tools/csv';
 import { lockfileTools } from '@tools/lockfile';
+import { timeTools } from '@tools/time';
+import { hashTools } from '@tools/hash';
 
 /**
  * The site is a set of sections. A section with tools is ours; a section
@@ -43,6 +45,16 @@ export const sections: readonly Section[] = [
     intro:
       'A lockfile is a map of everything your build trusts, and a private one names your internal registry — which is why these run in your tab rather than on someone else’s server. It is also thousands of lines nobody reads, which is how a change that matters gets merged unnoticed.',
     tools: lockfileTools,
+  },
+  {
+    slug: 'time',
+    name: 'Time & scheduling',
+    tagline: 'Epoch conversion and cron, with daylight saving taken seriously.',
+    description:
+      'Convert Unix timestamps across time zones and preview exactly when a cron expression fires, including the local times that daylight saving skips or repeats.',
+    intro:
+      'Time arithmetic is where confident answers go wrong. A local time that occurs twice, or not at all, is not an edge case twice a year — it is a job that ran twice, or never, and a week of blaming the infrastructure.',
+    tools: timeTools,
   },
   {
     slug: 'regex',
@@ -113,21 +125,13 @@ export const sections: readonly Section[] = [
   },
   {
     slug: 'encoding',
-    name: 'Encoding & crypto',
-    tagline: 'Base64, hashes, ciphers and data mangling.',
+    name: 'Hashing & crypto',
+    tagline: 'Digests and signatures, computed where the secret already is.',
     description:
-      'Encoding, decoding, hashing and data transformation tools that run locally.',
+      'Compute SHA-256, SHA-1, MD5 and CRC-32 digests, verify a published checksum, and generate an HMAC — all in your browser, with neither the input nor the key transmitted.',
     intro:
-      'The things people base64-decode are usually the things they should be most careful with: tokens, certificates, config blobs, the payload half of a JWT.',
-    tools: [],
-    recommendations: [
-      {
-        name: 'CyberChef',
-        href: 'https://gchq.github.io/CyberChef/',
-        blurb: 'The "cyber swiss army knife" — chain hundreds of encoding, crypto and analysis operations. Entirely client-side.',
-        local: true,
-      },
-    ],
+      'People hash the things they are most careful with: tokens, payloads, signing secrets. Every online hash generator that computes server-side receives the plaintext before it returns a digest, which rather defeats the exercise.',
+    tools: hashTools,
   },
   {
     slug: 'jwt',

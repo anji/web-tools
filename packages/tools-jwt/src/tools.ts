@@ -10,7 +10,7 @@ import {
 import { decodeJwt } from './decode.js';
 import { CLAIM_DESCRIPTIONS, TIME_CLAIMS, formatTimestamp, validityOf } from './claims.js';
 import { analyzeJwt } from './analyze.js';
-import { hmacSha256, timingSafeEqual } from './hmac.js';
+import { hmac, timingSafeEqual } from '@tools/hash';
 import { base64UrlToBytes, bytesToBase64Url, textToBytes } from './base64url.js';
 
 const JWT_INPUT = {
@@ -316,7 +316,7 @@ const verifierTool = defineTool({
         ? base64UrlToBytes(secret.replace(/\s+/g, ''))
         : textToBytes(secret);
 
-    const expected = hmacSha256(keyBytes, textToBytes(jwt.signingInput));
+    const expected = hmac('sha256', keyBytes, textToBytes(jwt.signingInput));
     const actual = base64UrlToBytes(jwt.signature);
     const matches = timingSafeEqual(expected, actual);
 

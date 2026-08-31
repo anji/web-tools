@@ -131,6 +131,52 @@ await check('tool page carries canonical, description and FAQ JSON-LD', async ()
   if (!ld.some((s) => s.includes('BreadcrumbList'))) throw new Error('no breadcrumbs');
 });
 
+// --- Hash and time: exactness is the reason these exist
+{
+  const { createHash } = await import('node:crypto');
+
+  await page.goto(`${BASE}/encoding/hash-generator/`, { waitUntil: 'networkidle' });
+  await check('hash generator agrees with the platform crypto library', async () => {
+    await type('textarea', 'hello');
+    const expected = createHash('sha256').update('hello').digest('hex');
+    const out = await output();
+    if (!out.includes(expected)) throw new Error('digest mismatch: ' + out.slice(0, 200));
+  });
+
+  await check('checksum verification answers match and mismatch', async () => {
+    const field = page.locator('input[type="text"]').last();
+    await field.fill(createHash('sha256').update('hello').digest('hex'));
+    await page.waitForTimeout(600);
+    if (!/^MATCH/.test(await output())) throw new Error('correct checksum not accepted');
+    await field.fill(createHash('md5').update('hello').digest('hex'));
+    await page.waitForTimeout(600);
+    const out = await output();
+    if (!/NO MATCH/.test(out)) throw new Error('wrong checksum accepted');
+    if (!/right algorithm/.test(out)) throw new Error('mismatch did not explain the length difference');
+  });
+
+  await page.goto(`${BASE}/time/timestamp-converter/`, { waitUntil: 'networkidle' });
+  await check('timestamp converter flags a local time that occurs twice', async () => {
+    await type('textarea', '2026-11-01 01:30');
+    await page.locator('input[type="text"]').first().fill('America/New_York');
+    await page.waitForTimeout(700);
+    const out = await output();
+    if (!/occurs twice/.test(out)) throw new Error('DST repeat not flagged: ' + out.slice(0, 300));
+  });
+
+  await page.goto(`${BASE}/time/cron-tester/`, { waitUntil: 'networkidle' });
+  await check('cron tester explains the day-of-month OR day-of-week rule', async () => {
+    await type('textarea', '0 0 1 * MON');
+    const out = await output();
+    if (!/fires when EITHER/.test(out)) throw new Error('OR rule not surfaced: ' + out.slice(0, 300));
+  });
+
+  await check('cron tester reports an expression that can never fire', async () => {
+    await type('textarea', '0 0 30 2 *');
+    if (!/never fires/.test(await output())) throw new Error('30 February was not caught');
+  });
+}
+
 // --- Lockfile diff: the supply-chain signal is the whole point
 {
   const mk = (pkgs) => JSON.stringify({

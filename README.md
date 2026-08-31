@@ -14,6 +14,8 @@ packages/tools-json  the JSON tools
 packages/tools-jwt   the JWT tools: decode, security analysis, HS256 verification
 packages/tools-csv   the CSV tools: parser, column inference, SQL, profiling
 packages/tools-lockfile  lockfile parsing for npm, pnpm and yarn, plus the diff
+packages/hash        MD5, SHA-1, SHA-256, CRC-32 and HMAC, plus their tools
+packages/tools-time  timezone arithmetic, DST resolution and cron
 sites/localuse       the deployed site: localuse.dev
 ```
 
@@ -99,7 +101,7 @@ descent, slices, and single-comparison filters including `=~`.
 ## Tests
 
 ```
-pnpm test          # 320 tests
+pnpm test          # 382 tests
 ```
 
 Generated code is compiled, not merely asserted on. TypeScript goes through
@@ -113,11 +115,17 @@ a leading underscore Pydantic rejects outright, or `TypeReference<long>` — all
 of which shipped in a first draft and were caught only because a real
 toolchain refused them.
 
-The SHA-256 and HMAC behind the JWT verifier are implemented here rather than
-taken from WebCrypto, which is async-only and would have forced the whole tool
-contract to become asynchronous for one feature. They are checked against
-`node:crypto` over fixed vectors, every length that straddles the 64-byte block
-boundary, and randomised input.
+The digests in `packages/hash` are implemented rather than taken from WebCrypto,
+which is async-only and would have forced the whole tool contract to become
+asynchronous for one feature. MD5, SHA-1, SHA-256 and their HMACs are checked
+against `node:crypto` over published vectors, every length that straddles the
+64-byte block boundary, key lengths either side of it, and randomised input.
+
+`packages/tools-time` resolves wall-clock times through `Intl` alone. The
+difficult direction is local to UTC, because an offset is a function of the
+instant being solved for — and around a transition the answer is not unique.
+Both outcomes are reported rather than silently resolved, since a local time
+that occurs twice or not at all is a job that ran twice or never.
 
 The browser checks live in `sites/localuse/test`. The load-bearing one asserts that a
 full session across every tool makes **zero third-party network requests**. If

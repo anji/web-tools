@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
-import { sha256, hmacSha256, timingSafeEqual } from '../src/hmac.js';
+import { sha256, timingSafeEqual } from '../src/sha256.js';
+import { hmac } from '../src/hmac.js';
 
 const hex = (bytes: Uint8Array) =>
   [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -46,7 +47,7 @@ describe('hmacSha256', () => {
         const message = randomBytes(messageLength);
         const expected = createHmac('sha256', key).update(message).digest('hex');
         expect(
-          hex(hmacSha256(new Uint8Array(key), new Uint8Array(message))),
+          hex(hmac('sha256', new Uint8Array(key), new Uint8Array(message))),
           `key ${keyLength}, message ${messageLength}`,
         ).toBe(expected);
       }
@@ -59,7 +60,8 @@ describe('hmacSha256', () => {
     const expected = createHmac('sha256', 'your-256-bit-secret')
       .update(signingInput)
       .digest('base64url');
-    const actual = hmacSha256(
+    const actual = hmac(
+      'sha256',
       new TextEncoder().encode('your-256-bit-secret'),
       new TextEncoder().encode(signingInput),
     );

@@ -26,6 +26,12 @@ importers:
 
   packages/core: {}
 
+  packages/hash:
+    dependencies:
+      '@tools/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/tools-csv:
     dependencies:
       '@tools/codegen':
@@ -52,6 +58,9 @@ importers:
       '@tools/core':
         specifier: workspace:*
         version: link:../core
+      '@tools/hash':
+        specifier: workspace:*
+        version: link:../hash
 
   packages/tools-lockfile:
     dependencies:
@@ -61,6 +70,12 @@ importers:
       yaml:
         specifier: ^2.6.1
         version: 2.9.0
+
+  packages/tools-time:
+    dependencies:
+      '@tools/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/ui:
     dependencies:
@@ -95,6 +110,9 @@ importers:
       '@tools/csv':
         specifier: workspace:*
         version: link:../../packages/tools-csv
+      '@tools/hash':
+        specifier: workspace:*
+        version: link:../../packages/hash
       '@tools/json':
         specifier: workspace:*
         version: link:../../packages/tools-json
@@ -104,6 +122,9 @@ importers:
       '@tools/lockfile':
         specifier: workspace:*
         version: link:../../packages/tools-lockfile
+      '@tools/time':
+        specifier: workspace:*
+        version: link:../../packages/tools-time
       '@tools/ui':
         specifier: workspace:*
         version: link:../../packages/ui

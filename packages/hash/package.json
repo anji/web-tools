@@ -1,5 +1,5 @@
 {
-  "name": "@tools/jwt",
+  "name": "@tools/hash",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -13,7 +13,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@tools/core": "workspace:*",
-    "@tools/hash": "workspace:*"
+    "@tools/core": "workspace:*"
   }
 }
