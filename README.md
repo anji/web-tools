@@ -213,3 +213,12 @@ at the host for threaded WASM builds.
 
 Cross-linking between the sites is the `siblings` list in each `brand.ts`,
 rendered in the footer.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
+
+The licence covers the code. It does not grant rights to the **LocalUse** name
+or the localuse.dev domain — no code licence transfers a trademark, and this one
+is no exception. Fork it, run it, ship it inside something else; just call your
+version something else.
