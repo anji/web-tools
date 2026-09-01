@@ -3,6 +3,8 @@ import { buildToolDefinition, defaultToolDefOptions } from '../src/tool-def.js';
 import { lintToolDefinitions } from '../src/lint.js';
 import { parseSse, analyseStream } from '../src/sse.js';
 import { llmTools } from '../src/tools.js';
+import { analyseBudget, renderBudget } from '../src/budget.js';
+import { diffToolSchemas, renderSchemaDiff } from '../src/schema-diff.js';
 import { defaultOptions } from '@tools/core';
 
 const build = (sample: unknown, over = {}) =>
@@ -315,5 +317,232 @@ describe('tools', () => {
     for (const t of llmTools) {
       expect(t.run(['@@@ not valid @@@'], defaultOptions(t) as any).ok).toBe(false);
     }
+  });
+});
+
+describe('schema budget', () => {
+  const tool = (name: string, props: Record<string, unknown>, description = 'x'.repeat(50)) => ({
+    name,
+    description,
+    input_schema: { type: 'object', properties: props },
+  });
+  const owner = { type: 'string', description: 'The account or organisation that owns the repository.' };
+  const repo = { type: 'string', description: 'The name of the repository.' };
+
+  it('ranks tools by payload share, largest first', () => {
+    const a = analyseBudget([
+      tool('small', { a: { type: 'string' } }),
+      tool('big', { a: owner, b: repo, c: owner, d: repo }),
+    ]);
+    expect(a.tools[0]?.name).toBe('big');
+    expect(a.tools[0]!.bytes).toBeGreaterThan(a.tools[1]!.bytes);
+    // The total measures the serialised array, so the brackets and commas
+    // between tools are real payload that belongs to no single tool. Shares
+    // therefore sum to just under 1 rather than exactly 1.
+    const sum = a.tools.reduce((s, t) => s + t.share, 0);
+    expect(sum).toBeGreaterThan(0.97);
+    expect(sum).toBeLessThanOrEqual(1);
+  });
+
+  it('finds fields repeated across tools, which is the largest avoidable cost', () => {
+    // The SEP-1576 finding: the same field re-described in tool after tool.
+    const a = analyseBudget([
+      tool('one', { owner, repo, number: { type: 'integer' } }),
+      tool('two', { owner, repo, title: { type: 'string' } }),
+      tool('three', { owner, repo }),
+    ]);
+    const ownerDuplicate = a.duplicates.find((d) => d.field === 'owner');
+    expect(ownerDuplicate?.toolCount).toBe(3);
+    expect(ownerDuplicate?.identical).toBe(true);
+    expect(a.findings.some((f) => /Repeated fields are \d+% of the payload/.test(f.title))).toBe(true);
+  });
+
+  it('notices when a repeated field is defined differently in different tools', () => {
+    const a = analyseBudget([
+      tool('one', { id: { type: 'string' } }),
+      tool('two', { id: { type: 'integer' } }),
+    ]);
+    expect(a.duplicates.find((d) => d.field === 'id')?.identical).toBe(false);
+  });
+
+  it('flags tools that share an identical description as high severity', () => {
+    const same = 'Does a thing that is described in exactly the same words.';
+    const a = analyseBudget([tool('one', { a: owner }, same), tool('two', { b: repo }, same)]);
+    const hit = a.findings.find((f) => f.title.includes('identical description'));
+    expect(hit?.severity).toBe('high');
+  });
+
+  it('flags deep nesting and oversized enums', () => {
+    const deep = {
+      name: 'deep',
+      description: 'd',
+      input_schema: {
+        type: 'object',
+        properties: { a: { type: 'object', properties: { b: { type: 'object', properties: { c: { type: 'object', properties: { d: { type: 'string' } } } } } } } },
+      },
+    };
+    expect(analyseBudget([deep]).findings.some((f) => /nests \d+ levels/.test(f.title))).toBe(true);
+
+    const bigEnum = tool('e', { mode: { type: 'string', enum: Array.from({ length: 30 }, (_, i) => `v${i}`) } });
+    expect(analyseBudget([bigEnum]).findings.some((f) => /enumerates 30 values/.test(f.title))).toBe(true);
+  });
+
+  it('reports bytes rather than pretending to count tokens', () => {
+    const out = renderBudget(analyseBudget([tool('a', { x: owner })]), false);
+    expect(out).toMatch(/bytes of JSON, not tokens/);
+    expect(out).not.toMatch(/\d+ tokens/);
+  });
+
+  it('measures multi-byte characters as the bytes they cost', () => {
+    const ascii = analyseBudget([tool('a', {}, 'aaaa')]).totalBytes;
+    const utf8 = analyseBudget([tool('a', {}, '東京東京')]).totalBytes;
+    expect(utf8).toBeGreaterThan(ascii);
+  });
+});
+
+describe('schema drift', () => {
+  const base = {
+    name: 'search',
+    description: 'Search the knowledge base for matching documents.',
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string', description: 'The search text.' }, limit: { type: 'integer' } },
+      required: ['query'],
+    },
+  };
+  const diff = (after: unknown, before: unknown = base) =>
+    diffToolSchemas([before], [after]);
+  const find = (after: unknown, before: unknown = base) =>
+    diff(after, before).changes.map((c) => `${c.kind}:${c.title}`).join(' | ');
+
+  it('calls a removed tool breaking', () => {
+    expect(diffToolSchemas([base], []).changes[0]?.kind).toBe('breaking');
+  });
+
+  it('calls an added tool additive', () => {
+    expect(diffToolSchemas([], [base]).changes[0]?.kind).toBe('additive');
+  });
+
+  it('separates a description change as behavioral, not breaking', () => {
+    const changed = { ...base, description: 'Search only the archived documents.' };
+    const result = diff(changed);
+    expect(result.counts.breaking).toBe(0);
+    expect(result.counts.behavioral).toBe(1);
+    expect(result.changes[0]?.title).toBe('Description changed');
+  });
+
+  it('treats an argument description change as behavioral too', () => {
+    const changed = {
+      ...base,
+      input_schema: {
+        ...base.input_schema,
+        properties: { ...base.input_schema.properties, query: { type: 'string', description: 'A regular expression.' } },
+      },
+    };
+    expect(find(changed)).toMatch(/behavioral:Argument description changed: query/);
+  });
+
+  it('calls a new required argument breaking and a new optional one additive', () => {
+    const required = {
+      ...base,
+      input_schema: {
+        ...base.input_schema,
+        properties: { ...base.input_schema.properties, scope: { type: 'string' } },
+        required: ['query', 'scope'],
+      },
+    };
+    expect(find(required)).toMatch(/breaking:Required argument added: scope/);
+
+    const optional = {
+      ...base,
+      input_schema: {
+        ...base.input_schema,
+        properties: { ...base.input_schema.properties, scope: { type: 'string' } },
+      },
+    };
+    expect(find(optional)).toMatch(/additive:Optional argument added: scope/);
+  });
+
+  it('calls a removed argument and a changed type breaking', () => {
+    const removed = {
+      ...base,
+      input_schema: { ...base.input_schema, properties: { query: base.input_schema.properties.query } },
+    };
+    expect(find(removed)).toMatch(/breaking:Argument removed: limit/);
+
+    const retyped = {
+      ...base,
+      input_schema: {
+        ...base.input_schema,
+        properties: { ...base.input_schema.properties, limit: { type: 'string' } },
+      },
+    };
+    expect(find(retyped)).toMatch(/breaking:Type changed: limit/);
+  });
+
+  it('distinguishes narrowing an enum from widening it', () => {
+    const withEnum = {
+      ...base,
+      input_schema: {
+        ...base.input_schema,
+        properties: { ...base.input_schema.properties, limit: { type: 'integer', enum: [1, 2, 3] } },
+      },
+    };
+    const narrowed = {
+      ...withEnum,
+      input_schema: {
+        ...withEnum.input_schema,
+        properties: { ...withEnum.input_schema.properties, limit: { type: 'integer', enum: [1, 2] } },
+      },
+    };
+    expect(find(narrowed, withEnum)).toMatch(/breaking:Allowed values removed from limit/);
+    expect(find(withEnum, narrowed)).toMatch(/additive:Allowed values added to limit/);
+  });
+
+  it('calls newly introducing an enum breaking', () => {
+    const restricted = {
+      ...base,
+      input_schema: {
+        ...base.input_schema,
+        properties: { ...base.input_schema.properties, limit: { type: 'integer', enum: [1, 2] } },
+      },
+    };
+    expect(find(restricted)).toMatch(/breaking:limit restricted to a fixed set/);
+  });
+
+  it('tracks required becoming optional and back', () => {
+    const relaxed = { ...base, input_schema: { ...base.input_schema, required: [] } };
+    expect(find(relaxed)).toMatch(/additive:query is no longer required/);
+    expect(find(base, relaxed)).toMatch(/breaking:query is now required/);
+  });
+
+  it('calls enabling strict mode breaking', () => {
+    expect(find({ ...base, strict: true })).toMatch(/breaking:strict mode enabled/);
+  });
+
+  it('reports identical sets as identical', () => {
+    const result = diffToolSchemas([base], [base]);
+    expect(result.changes).toHaveLength(0);
+    expect(renderSchemaDiff(result, false)).toMatch(/identical/);
+  });
+
+  it('sorts breaking changes above behavioral above additive', () => {
+    const messy = {
+      ...base,
+      description: 'Different words entirely.',
+      input_schema: {
+        ...base.input_schema,
+        properties: { query: base.input_schema.properties.query, extra: { type: 'string' } },
+      },
+    };
+    const kinds = diff(messy).changes.map((c) => c.kind);
+    expect(kinds[0]).toBe('breaking');
+    expect(kinds).toEqual([...kinds].sort((a, b) =>
+      ({ breaking: 0, behavioral: 1, additive: 2 })[a] - ({ breaking: 0, behavioral: 1, additive: 2 })[b]));
+  });
+
+  it('explains why behavioral changes matter in the output', () => {
+    const changed = { ...base, description: 'Something else.' };
+    expect(renderSchemaDiff(diff(changed), false)).toMatch(/do not announce themselves/);
   });
 });

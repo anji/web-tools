@@ -167,6 +167,44 @@ await check('tool page carries canonical, description and FAQ JSON-LD', async ()
   });
 }
 
+// --- Schema budget and drift: built from the community research, not a guess
+{
+  const field = { type: 'string', description: 'The account that owns the repository.' };
+  const tool = (name, props) => ({
+    name, description: 'Does a thing worth describing at a reasonable length.',
+    input_schema: { type: 'object', properties: props },
+  });
+
+  await page.goto(`${BASE}/llm/tool-schema-budget/`, { waitUntil: 'networkidle' });
+  await check('schema budget finds a field repeated across tools', async () => {
+    await type('textarea', JSON.stringify([
+      tool('a', { owner: field, x: { type: 'string' } }),
+      tool('b', { owner: field, y: { type: 'string' } }),
+      tool('c', { owner: field }),
+    ]));
+    const out = await output();
+    if (!/REPEATED FIELDS/.test(out)) throw new Error('no repeated-field section: ' + out.slice(0, 300));
+    if (!/owner\s+in\s+3 tools/.test(out)) throw new Error('owner not counted across 3 tools');
+    // It must never claim a token count it cannot compute correctly.
+    if (/\d+ tokens/.test(out)) throw new Error('claimed a token count');
+  });
+
+  await page.goto(`${BASE}/llm/tool-schema-diff/`, { waitUntil: 'networkidle' });
+  await check('schema diff separates behavioral drift from breaking changes', async () => {
+    const before = [{ name: 'search', description: 'Search the knowledge base.',
+      input_schema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] } }];
+    const after = [{ name: 'search', description: 'Search ONLY archived documents.',
+      input_schema: { type: 'object', properties: { q: { type: 'string' } }, required: ['q'] } }];
+    await page.locator('textarea').nth(0).fill(JSON.stringify(before));
+    await page.locator('textarea').nth(1).fill(JSON.stringify(after));
+    await page.waitForTimeout(700);
+    const out = await output();
+    // Nothing structural changed, so this must not be reported as breaking.
+    if (!/BEHAVIORAL \(1\)/.test(out)) throw new Error('description change not behavioral: ' + out.slice(0, 300));
+    if (/BREAKING \(/.test(out)) throw new Error('reported a description change as breaking');
+  });
+}
+
 // --- Hash and time: exactness is the reason these exist
 {
   const { createHash } = await import('node:crypto');

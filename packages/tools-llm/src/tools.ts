@@ -3,6 +3,9 @@ import { parseJson } from './parse.js';
 import { buildToolDefinition, defaultToolDefOptions } from './tool-def.js';
 import { lintToolDefinitions } from './lint.js';
 import { analyseStream, renderAnalysis } from './sse.js';
+import { analyseBudget, renderBudget } from './budget.js';
+import { diffToolSchemas, renderSchemaDiff } from './schema-diff.js';
+import { extractTools } from './extract.js';
 
 const PRIVACY_FAQ = {
   question: 'Is what I paste sent anywhere?',
@@ -282,4 +285,177 @@ const streamTool = defineTool({
   },
 });
 
-export const llmTools = [generatorTool, linterTool, streamTool];
+const TOOLS_INPUT = (label: string) => ({
+  label,
+  placeholder: '[\n  {\n    "name": "search",\n    "description": "…",\n    "input_schema": { "type": "object", "properties": { "query": { "type": "string" } } }\n  }\n]',
+  language: 'json' as const,
+  accept: ['.json', '.txt'] as const,
+});
+
+const budgetTool = defineTool({
+  id: 'tool-schema-budget',
+  slug: 'tool-schema-budget',
+  label: 'Tool schema budget',
+  blurb: 'Find which tool definitions are eating your context, and the fields duplicated across them.',
+  category: 'Inspect',
+  seo: {
+    title: 'Tool Schema Budget - Which Tools Are Eating Your Context Window',
+    description:
+      'Measure what a set of tool definitions costs to send. Ranks tools by payload share, finds fields repeated across many tools, and flags oversized enums and deep nesting. Runs in your browser.',
+    heading: 'Tool Schema Budget',
+    intro:
+      'Tool definitions are sent on every single request, before the user has said anything. Paste a tools array to see which ones dominate the payload and which fields are being re-described in tool after tool.',
+    keywords: [
+      'mcp token bloat',
+      'tool schema size',
+      'reduce tool definition tokens',
+      'mcp context window',
+      'tool schema overhead',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      {
+        question: 'Why bytes and not tokens?',
+        answer:
+          'Because a token count computed here would be wrong. Token counts are model-specific and only exact from a count_tokens endpoint, and general-purpose tokenizers are off by enough to mislead — particularly on JSON, which is mostly punctuation and short identifiers. What you act on is the ranking and the share, and bytes give both exactly. Treat the numbers as relative, and get an absolute count from the API when you need one.',
+      },
+      {
+        question: 'Why do repeated fields matter so much?',
+        answer:
+          'Because the definition is re-sent once per tool, on every request. An analysis of GitHub’s own MCP server found "owner" in 36 of 60 tool schemas and "repo" in 39 — the same few lines of JSON, paid for dozens of times. Shared fields are usually the largest avoidable cost in a tool set, and the easiest to spot once something counts them.',
+      },
+      {
+        question: 'Is a long description a problem?',
+        answer:
+          'Usually not. The description is what makes a tool get called correctly, and trimming it to save bytes is a bad trade. It is flagged only so you can check the length is doing work rather than restating the schema in prose.',
+      },
+      {
+        question: 'How much does this actually cost?',
+        answer:
+          'A report on the MCP spec repository measured about 1,000 tokens for a heavy tool and roughly 10,000 tokens for a 20-tool set before any user message, putting first-turn schema cost at around $390 across 2,600 conversations. The author’s point was that the context spent is capacity the model no longer has for reasoning — the bill is the smaller half of the problem.',
+      },
+    ],
+  },
+  inputs: [TOOLS_INPUT('Tools array or request body')] as const,
+  options: [
+    { kind: 'boolean', key: 'showAll', label: 'Show every tool', default: false, help: 'Otherwise the 15 largest.' },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const parsed = parseJson(inputs[0] ?? '');
+    if (!parsed.ok) return parsed;
+
+    const extracted = extractTools(parsed.value);
+    if (!extracted || extracted.tools.length === 0) {
+      return {
+        ok: false,
+        error: {
+          message: 'No tools found.',
+          hint: 'Paste a tools array, a single tool definition, or a request body containing one.',
+        },
+      };
+    }
+
+    const analysis = analyseBudget(extracted.tools);
+    const duplicateBytes = analysis.duplicates.reduce((sum, d) => sum + d.bytes, 0);
+
+    return ok({
+      content: renderBudget(analysis, readBoolean(options, 'showAll', false)),
+      language: 'text',
+      filename: 'schema-budget.txt',
+      stats: [
+        { label: 'tools', value: String(analysis.tools.length) },
+        { label: 'payload', value: `${(analysis.totalBytes / 1024).toFixed(1)} KB` },
+        {
+          label: 'repeated',
+          value: analysis.totalBytes > 0 ? `${Math.round((duplicateBytes / analysis.totalBytes) * 100)}%` : '0%',
+        },
+      ],
+    });
+  },
+});
+
+const schemaDiffTool = defineTool({
+  id: 'tool-schema-diff',
+  slug: 'tool-schema-diff',
+  label: 'Tool schema diff',
+  blurb: 'Compare two versions of a tool set and separate breaking from merely behavioral.',
+  category: 'Inspect',
+  seo: {
+    title: 'Tool Schema Diff - Catch Silent Drift Between Tool Set Versions',
+    description:
+      'Compare two versions of a tool definition set. Separates breaking changes from additive ones, and calls out description changes that alter how a model behaves without breaking anything.',
+    heading: 'Tool Schema Diff',
+    intro:
+      'Tool schemas change under you. Some of those changes break calls outright; the more awkward ones change nothing structural and simply make the model choose differently. Paste both versions to see which is which.',
+    keywords: [
+      'mcp schema drift',
+      'tool schema breaking change',
+      'compare mcp tool versions',
+      'tool definition diff',
+      'mcp contract testing',
+    ],
+    faq: [
+      PRIVACY_FAQ,
+      {
+        question: 'Why is a description change worth flagging?',
+        answer:
+          'Because it is the one that gets missed. The signature is unchanged, every existing call still validates, nothing errors — and the model now decides differently about when to reach for the tool and what to put in its arguments. A line diff shows it as one changed string among many; here it gets its own category.',
+      },
+      {
+        question: 'What counts as breaking?',
+        answer:
+          'A tool removed, an argument removed, a required argument added, a type changed, an optional argument becoming required, allowed values removed from an enum, or strict mode being switched on. Each of these rejects a call that previously worked.',
+      },
+      {
+        question: 'Why does this need a tool at all?',
+        answer:
+          'Because tool sets have no versioning discipline yet. There is no contract testing and no breaking-change detection in the ecosystem, so a server can change what it exposes between deploys with nothing to compare against. A drifted tool does not throw — it returns a confident wrong answer, which is considerably harder to notice.',
+      },
+    ],
+  },
+  inputs: [TOOLS_INPUT('Before'), TOOLS_INPUT('After')] as const,
+  options: [
+    { kind: 'boolean', key: 'hideAdditive', label: 'Hide additive changes', default: false },
+  ],
+  run(inputs, options): Result<ToolOutput> {
+    const before = parseJson(inputs[0] ?? '');
+    if (!before.ok) {
+      return { ok: false, error: { ...before.error, message: `Before: ${before.error.message}` } };
+    }
+    const after = parseJson(inputs[1] ?? '');
+    if (!after.ok) {
+      return { ok: false, error: { ...after.error, message: `After: ${after.error.message}` } };
+    }
+
+    const beforeTools = extractTools(before.value);
+    const afterTools = extractTools(after.value);
+    if (!beforeTools || !afterTools) {
+      return {
+        ok: false,
+        error: {
+          message: 'Could not read one side as tool definitions.',
+          hint: 'Each side should be a tools array, a single tool definition, or a request body containing one.',
+        },
+      };
+    }
+
+    const diff = diffToolSchemas(beforeTools.tools, afterTools.tools);
+
+    return ok({
+      content: renderSchemaDiff(diff, readBoolean(options, 'hideAdditive', false)),
+      language: 'text',
+      filename: 'schema-diff.txt',
+      stats: [
+        { label: 'breaking', value: String(diff.counts.breaking) },
+        { label: 'behavioral', value: String(diff.counts.behavioral) },
+        { label: 'additive', value: String(diff.counts.additive) },
+      ],
+      warnings:
+        diff.counts.breaking > 0
+          ? ['Breaking changes present — existing calls will start failing against the new version.']
+          : [],
+    });
+  },
+});
+
+export const llmTools = [generatorTool, linterTool, streamTool, budgetTool, schemaDiffTool];

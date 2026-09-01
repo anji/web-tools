@@ -16,7 +16,7 @@ packages/tools-csv   the CSV tools: parser, column inference, SQL, profiling
 packages/tools-lockfile  lockfile parsing for npm, pnpm and yarn, plus the diff
 packages/hash        MD5, SHA-1, SHA-256, CRC-32 and HMAC, plus their tools
 packages/tools-time  timezone arithmetic, DST resolution and cron
-packages/tools-llm   tool definitions, their linter, and an SSE stream inspector
+packages/tools-llm   tool definitions, linting, schema budget and drift, SSE inspection
 sites/localuse       the deployed site: localuse.dev
 ```
 
@@ -102,7 +102,7 @@ descent, slices, and single-comparison filters including `=~`.
 ## Tests
 
 ```
-pnpm test          # 426 tests
+pnpm test          # 446 tests
 ```
 
 Generated code is compiled, not merely asserted on. TypeScript goes through
